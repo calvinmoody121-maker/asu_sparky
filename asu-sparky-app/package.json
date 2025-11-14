@@ -10,10 +10,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@mediapipe/camera_utils": "^0.3.1675466862",
+    "@mediapipe/face_mesh": "^0.4.1633559619",
+    "@mediapipe/hands": "^0.4.1675469240",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.4.0",
     "@vladmandic/face-api": "^1.7.15",
     "lucide-react": "^0.552.0",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "three": "^0.181.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
