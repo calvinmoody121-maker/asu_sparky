@@ -1,528 +1,1490 @@
-// Import React hooks for state management and lifecycle control
-import React, { useRef, useEffect, useState } from 'react';
-
-// Import icon components from lucide-react library for UI elements
-import { Camera, Power, AlertCircle, Loader, Eye, EyeOff, Sparkles } from 'lucide-react';
-
-// Import the face-api library for face detection and landmark tracking
+import React, { useRef, useEffect, useState, Suspense } from 'react';
+import { Canvas, useFrame, useLoader } from '@react-three/fiber';
+import { Camera, Power, AlertCircle, Loader, Eye, EyeOff, Sparkles, BookOpen } from 'lucide-react';
 import * as faceapi from '@vladmandic/face-api';
-
-// Import the Sparky PNG image from assets folder
-import sparkyPNG from './assets/500-5003481_asu-sparky-png-download-sparky-sun-devil-transparent.png';
+import * as THREE from 'three';
 
 /**
- * ASUSparkyFaceFilter Component
- *
- * This is the main React component that provides a webcam-based face filter
- * application with ASU Sparky branding. It detects faces in real-time using
- * machine learning models and overlays the ASU Sparky mascot on detected faces.
- *
- * Key Features:
- * - Real-time face detection using TinyFaceDetector model
- * - 68-point facial landmark tracking
- * - Sparky mascot overlay on detected faces
- * - Live webcam feed with canvas overlay for graphics
- * - ASU branding and styling
+ * ASU Sparky AR Face Filter
+ * Using face-api.js for face detection + Three.js for 3D AR rendering
+ * With MediaPipe Hands for hand-held pitchfork feature
  */
 
+// ASU Quiz Component
+function ASUQuiz({ onBack, styles }) {
+  const questions = [
+    {
+      question: "What are ASU's official colors?",
+      options: ["Red and White", "Maroon and Gold", "Black and Gold", "Sun Devil Red and Gold"],
+      correctAnswer: "Maroon and Gold",
+    },
+    {
+      question: "What is the name of ASU's beloved mascot?",
+      options: ["Sparty", "Goldy the Gopher", "Sparky the Sun Devil", "Joe Bruin"],
+      correctAnswer: "Sparky the Sun Devil",
+    },
+    {
+      question: "ASU has been ranked #1 in the U.S. for what category for 9 consecutive years (as of 2024)?",
+      options: ["Best Party School", "Most Beautiful Campus", "Innovation", "Best Engineering Program"],
+      correctAnswer: "Innovation",
+    },
+    {
+      question: "What is the name of ASU's football stadium?",
+      options: ["Sun Devil Stadium", "Chase Field", "State Farm Stadium", "Maroon and Gold Field"],
+      correctAnswer: "Sun Devil Stadium",
+    },
+    {
+      question: "The gesture of holding up the index and middle fingers with the thumb holding down the ring and pinky fingers is known as what?",
+      options: ["Sun Power", "The Pitchfork", "Devil's Horns", "Victory Sign"],
+      correctAnswer: "The Pitchfork",
+    },
+  ];
+
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [score, setScore] = useState(0);
+  const [quizFinished, setQuizFinished] = useState(false);
+
+  const handleAnswerClick = (option) => {
+    if (option === questions[currentQuestionIndex].correctAnswer) {
+      setScore(score + 1);
+    }
+
+    const nextQuestion = currentQuestionIndex + 1;
+    if (nextQuestion < questions.length) {
+      setCurrentQuestionIndex(nextQuestion);
+    } else {
+      setQuizFinished(true);
+    }
+  };
+
+  const restartQuiz = () => {
+    setCurrentQuestionIndex(0);
+    setScore(0);
+    setQuizFinished(false);
+  };
+
+  const getScoreComment = (finalScore) => {
+    switch (finalScore) {
+      case 0:
+        return "Keep trying, Sun Devil! You'll get it next time!";
+      case 1:
+        return "Almost! Try again to get a full score!";
+      case 2:
+        return "Not bad! A true Sun Devil knows their stuff, give it another go!";
+      case 3:
+        return "Good job! You're on your way to becoming an ASU expert!";
+      case 4:
+        return "Great score! You really know your ASU trivia!";
+      case 5:
+        return "Perfect score! You're a true Sun Devil! Forks Up! 🔱";
+      default:
+        return "Thanks for playing!";
+    }
+  };
+
+  return (
+    <div style={{ padding: '30px', background: '#1a1a1a', color: 'white', borderRadius: '10px' }}>
+      <h2 style={{ color: '#FFC627', textAlign: 'center', marginBottom: '20px' }}>ASU Trivia Quiz!</h2>
+      {quizFinished ? (
+        <div style={{ textAlign: 'center' }}>
+          <h3 style={{ fontSize: '1.5rem' }}>Quiz Finished!</h3>
+          <p style={{ fontSize: '1.2rem', color: '#FFF8DC' }}>You scored {score} out of {questions.length}</p>
+          <p style={{ fontStyle: 'italic', color: '#FFD700', marginTop: '15px', fontSize: '1.1rem' }}>
+            {getScoreComment(score)}
+          </p>
+          <button onClick={restartQuiz} style={{ ...styles.button, marginRight: '10px' }}>
+            Try Again
+          </button>
+          <button onClick={onBack} style={{ ...styles.button, background: '#555' }}>
+            Back to AR Filter
+          </button>
+        </div>
+      ) : (
+        <div>
+          <h3 style={{ marginBottom: '15px' }}>{questions[currentQuestionIndex].question}</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            {questions[currentQuestionIndex].options.map((option) => (
+              <button
+                key={option}
+                onClick={() => handleAnswerClick(option)}
+                style={{
+                  ...styles.button,
+                  width: '100%',
+                  padding: '20px',
+                  background: 'linear-gradient(90deg, #8B0000 0%, #B8860B 100%)',
+                  textAlign: 'left'
+                }}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          <div style={{ textAlign: 'center', marginTop: '20px', color: '#FFC627' }}>
+            <p>Question {currentQuestionIndex + 1} of {questions.length}</p>
+            <p>Current Score: {score}</p>
+          </div>
+          <div style={{ textAlign: 'center', marginTop: '30px' }}>
+            <button onClick={onBack} style={{ ...styles.button, background: '#555' }}>
+              Exit Quiz
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 3D Hand-Held Pitchfork Component (appears when hand is detected)
+function HandHeldPitchfork({ handLandmarks, color, handleColor, size = 1.0, rotation = 0 }) {
+  const pitchforkRef = useRef();
+  // Smoothing factor for position and rotation (lower value = smoother)
+  const smoothingFactor = 0.1;
+
+  // Target quaternion for smooth rotation
+  const targetQuaternion = new THREE.Quaternion();
+  useFrame((state, delta) => {
+    if (!handLandmarks || !pitchforkRef.current) return;
+
+    // Use palm center for more realistic positioning
+    // Landmarks: 0=wrist, 9=middle finger base, 5=index base, 17=pinky base
+    const wrist = handLandmarks[0];
+    const middleFinger = handLandmarks[9];
+    const indexBase = handLandmarks[5];
+    const pinkyBase = handLandmarks[17];
+
+    // Calculate palm center (average of key palm points)
+    const palmCenterX = (wrist.x + middleFinger.x + indexBase.x + pinkyBase.x) / 4;
+    const palmCenterY = (wrist.y + middleFinger.y + indexBase.y + pinkyBase.y) / 4;
+
+    // Convert from MediaPipe normalized coordinates (0-1) to Three.js normalized coordinates (-1 to 1)
+    const handX = palmCenterX * 2 - 1;
+    const handY = -(palmCenterY * 2 - 1); // Invert Y axis
+
+    // Calculate hand orientation using index finger to pinky vector for better accuracy
+    const angle = Math.atan2(
+      pinkyBase.y - indexBase.y,
+      pinkyBase.x - indexBase.x
+    );
+
+    // --- Smoothing Logic ---
+
+    // 1. Smooth Position (Lerp)
+    const targetPosition = new THREE.Vector3(handX, handY, 0);
+    pitchforkRef.current.position.lerp(targetPosition, smoothingFactor);
+
+    // 2. Smooth Rotation (Slerp)
+    // Create a target rotation and apply the manual offset
+    const targetAngle = -angle - Math.PI / 2 + rotation;
+    targetQuaternion.setFromEuler(new THREE.Euler(0, 0, targetAngle));
+
+    // Slerp (spherical linear interpolation) the pitchfork's rotation towards the target
+    pitchforkRef.current.quaternion.slerp(targetQuaternion, smoothingFactor);
+
+    pitchforkRef.current.scale.set(size * 1.5, size * 1.5, size * 1.5);
+  });
+
+  return (
+    <group ref={pitchforkRef}>
+      {/* Pitchfork Handle */}
+      <mesh position={[0, -0.3, 0]}>
+        <cylinderGeometry args={[0.015, 0.015, 0.6, 8]} />
+        <meshStandardMaterial color={handleColor} />
+      </mesh>
+
+      {/* Left Prong */}
+      <mesh position={[-0.06, 0.2, 0]}>
+        <cylinderGeometry args={[0.008, 0.008, 0.2, 8]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.5}
+        />
+      </mesh>
+
+      {/* Center Prong */}
+      <mesh position={[0, 0.25, 0]}>
+        <cylinderGeometry args={[0.008, 0.008, 0.25, 8]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.5}
+        />
+      </mesh>
+
+      {/* Right Prong */}
+      <mesh position={[0.06, 0.2, 0]}>
+        <cylinderGeometry args={[0.008, 0.008, 0.2, 8]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.5}
+        />
+      </mesh>
+
+      {/* Prong base/connector */}
+      <mesh position={[0, 0.1, 0]}>
+        <boxGeometry args={[0.15, 0.02, 0.02]} />
+        <meshStandardMaterial color="#FFD700" metalness={0.7} roughness={0.3} />
+      </mesh>
+    </group>
+  );
+}
+
+// 3D Devil Horns Component
+function DevilHorns({ landmarks, videoWidth, videoHeight, opacity, color, size = 1.0, style = 'devil' }) {
+  const hornsGroupRef = useRef();
+  const smoothingFactor = 0.1;
+  const targetQuaternion = new THREE.Quaternion();
+
+  useFrame(() => {
+    if (!landmarks || !hornsGroupRef.current) return;
+
+    const leftEyebrow = landmarks._positions[19];
+    const rightEyebrow = landmarks._positions[24];
+    const noseBridge = landmarks._positions[27];
+
+    // Convert from video coordinates to Three.js normalized coordinates
+    const headCenterX = (noseBridge.x / videoWidth) * 2 - 1;
+    const headCenterY = -((noseBridge.y / videoHeight) * 2 - 1);
+
+    console.log('DevilHorns rendering at:', { headCenterX, headCenterY, videoWidth, videoHeight, noseBridgeX: noseBridge.x, noseBridgeY: noseBridge.y });
+
+    // Calculate head rotation based on eyebrow positions
+    const headAngle = Math.atan2(
+      rightEyebrow.y - leftEyebrow.y,
+      rightEyebrow.x - leftEyebrow.x
+    );
+
+    // Smooth position
+    const targetPosition = new THREE.Vector3(headCenterX, headCenterY + 0.4, 0);
+    hornsGroupRef.current.position.lerp(targetPosition, smoothingFactor);
+
+    // Smooth rotation
+    targetQuaternion.setFromEuler(new THREE.Euler(0, 0, -headAngle));
+    hornsGroupRef.current.quaternion.slerp(targetQuaternion, smoothingFactor);
+
+    // Apply scale
+    hornsGroupRef.current.scale.set(size, size, size);
+  });
+
+  // Different horn styles
+  const renderHorns = () => {
+    switch (style) {
+      case 'curved':
+        // Curved horns pointing backward
+        return (
+          <>
+            <mesh position={[-0.32, 0, 0]} rotation={[Math.PI / 6, 0, Math.PI / 4]}>
+              <coneGeometry args={[0.08, 0.35, 8]} />
+              <meshStandardMaterial
+                color={color}
+                transparent
+                opacity={opacity}
+                emissive={color}
+                emissiveIntensity={0.3}
+                roughness={0.6}
+              />
+            </mesh>
+            <mesh position={[0.32, 0, 0]} rotation={[Math.PI / 6, 0, -Math.PI / 4]}>
+              <coneGeometry args={[0.08, 0.35, 8]} />
+              <meshStandardMaterial
+                color={color}
+                transparent
+                opacity={opacity}
+                emissive={color}
+                emissiveIntensity={0.3}
+                roughness={0.6}
+              />
+            </mesh>
+          </>
+        );
+      case 'straight':
+        // Straight upward horns
+        return (
+          <>
+            <mesh position={[-0.29, 0, 0]} rotation={[0, 0, 0]}>
+              <coneGeometry args={[0.06, 0.4, 8]} />
+              <meshStandardMaterial
+                color={color}
+                transparent
+                opacity={opacity}
+                emissive={color}
+                emissiveIntensity={0.3}
+                roughness={0.7}
+              />
+            </mesh>
+            <mesh position={[0.29, 0, 0]} rotation={[0, 0, 0]}>
+              <coneGeometry args={[0.06, 0.4, 8]} />
+              <meshStandardMaterial
+                color={color}
+                transparent
+                opacity={opacity}
+                emissive={color}
+                emissiveIntensity={0.3}
+                roughness={0.7}
+              />
+            </mesh>
+          </>
+        );
+      case 'ram':
+        // Large ram horns curving outward and down
+        return (
+          <>
+            {/* Left ram horn - multiple segments for curl effect */}
+            <mesh position={[-0.32, 0.05, 0]} rotation={[Math.PI / 2.5, 0, Math.PI / 3]}>
+              <torusGeometry args={[0.12, 0.05, 8, 16, Math.PI * 1.2]} />
+              <meshStandardMaterial
+                color={color}
+                transparent
+                opacity={opacity}
+                emissive={color}
+                emissiveIntensity={0.3}
+                roughness={0.8}
+              />
+            </mesh>
+            {/* Right ram horn */}
+            <mesh position={[0.32, 0.05, 0]} rotation={[Math.PI / 2.5, 0, -Math.PI / 3]}>
+              <torusGeometry args={[0.12, 0.05, 8, 16, Math.PI * 1.2]} />
+              <meshStandardMaterial
+                color={color}
+                transparent
+                opacity={opacity}
+                emissive={color}
+                emissiveIntensity={0.3}
+                roughness={0.8}
+              />
+            </mesh>
+          </>
+        );
+      case 'dragon':
+        // Dragon/twisted horns pointing backward
+        return (
+          <>
+            {/* Left dragon horn - twisted cone */}
+            <mesh position={[-0.29, 0.1, -0.1]} rotation={[Math.PI / 4, 0.2, Math.PI / 6]}>
+              <cylinderGeometry args={[0.02, 0.07, 0.4, 8, 4, false]} />
+              <meshStandardMaterial
+                color={color}
+                transparent
+                opacity={opacity}
+                emissive={color}
+                emissiveIntensity={0.4}
+                metalness={0.4}
+                roughness={0.3}
+              />
+            </mesh>
+            {/* Right dragon horn */}
+            <mesh position={[0.29, 0.1, -0.1]} rotation={[Math.PI / 4, -0.2, -Math.PI / 6]}>
+              <cylinderGeometry args={[0.02, 0.07, 0.4, 8, 4, false]} />
+              <meshStandardMaterial
+                color={color}
+                transparent
+                opacity={opacity}
+                emissive={color}
+                emissiveIntensity={0.4}
+                metalness={0.4}
+                roughness={0.3}
+              />
+            </mesh>
+          </>
+        );
+      default: // 'devil'
+        // Classic devil horns angled outward
+        return (
+          <>
+            <mesh position={[-0.29, 0, 0]} rotation={[0, 0, Math.PI / 4]}>
+              <coneGeometry args={[0.08, 0.3, 8]} />
+              <meshStandardMaterial
+                color={color}
+                transparent
+                opacity={opacity}
+                emissive={color}
+                emissiveIntensity={0.3}
+                roughness={0.6}
+              />
+            </mesh>
+            <mesh position={[0.29, 0, 0]} rotation={[0, 0, -Math.PI / 4]}>
+              <coneGeometry args={[0.08, 0.3, 8]} />
+              <meshStandardMaterial
+                color={color}
+                transparent
+                opacity={opacity}
+                emissive={color}
+                emissiveIntensity={0.3}
+                roughness={0.6}
+              />
+            </mesh>
+          </>
+        );
+    }
+  };
+
+  return (
+    <group ref={hornsGroupRef}>
+      {renderHorns()}
+    </group>
+  );
+}
+
+// 3D ASU Sunglasses Component
+function Sunglasses({ landmarks, videoWidth, videoHeight, opacity, color, size = 1.0, style = 'rectangular' }) {
+  const glassesRef = useRef();
+  const smoothingFactor = 0.1;
+  const targetQuaternion = new THREE.Quaternion();
+
+  useFrame(() => {
+    if (!landmarks) return;
+
+    const leftEye = landmarks._positions[36];
+    const rightEye = landmarks._positions[45];
+    const noseBridge = landmarks._positions[27];
+
+    // Convert coordinates
+    const noseX = (noseBridge.x / videoWidth) * 2 - 1;
+    const noseY = -((noseBridge.y / videoHeight) * 2 - 1);
+
+    console.log('Sunglasses rendering at:', { noseX, noseY });
+
+    // Calculate head rotation based on eye positions
+    const headAngle = Math.atan2(
+      rightEye.y - leftEye.y,
+      rightEye.x - leftEye.x
+    );
+
+    if (glassesRef.current) {
+      // Smooth position
+      const targetPosition = new THREE.Vector3(noseX, noseY - 0.05, 0);
+      glassesRef.current.position.lerp(targetPosition, smoothingFactor);
+
+      // Smooth rotation
+      targetQuaternion.setFromEuler(new THREE.Euler(0, 0, -headAngle));
+      glassesRef.current.quaternion.slerp(targetQuaternion, smoothingFactor);
+
+      glassesRef.current.scale.set(size, size, size);
+    }
+  });
+
+  // Different glasses styles
+  const renderGlasses = () => {
+    switch (style) {
+      case 'round':
+        // Round sunglasses
+        return (
+          <>
+            {/* Left Lens */}
+            <mesh position={[-0.15, 0, 0.001]}>
+              <circleGeometry args={[0.11, 32]} />
+              <meshStandardMaterial
+                color={color || '#000000'}
+                transparent
+                opacity={opacity * 0.7}
+                metalness={0.2}
+                roughness={0.1}
+                emissive={color}
+              />
+            </mesh>
+            {/* Right Lens */}
+            <mesh position={[0.15, 0, 0.001]}>
+              <circleGeometry args={[0.11, 32]} />
+              <meshStandardMaterial
+                color={color || '#000000'}
+                transparent
+                opacity={opacity * 0.7}
+                metalness={0.2}
+                roughness={0.1}
+                emissive={color}
+              />
+            </mesh>
+            {/* Bridge */}
+            <mesh position={[0, 0, 0]}>
+              <boxGeometry args={[0.1, 0.03, 0.02]} />
+              <meshStandardMaterial color="#FFC627" transparent opacity={opacity} />
+            </mesh>
+            {/* Left Frame */}
+            <mesh position={[-0.15, 0, 0]}>
+              <ringGeometry args={[0.11, 0.13, 32]} />
+              <meshStandardMaterial
+                color="#FFC627"
+                transparent
+                opacity={opacity}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+            {/* Right Frame */}
+            <mesh position={[0.15, 0, 0]}>
+              <ringGeometry args={[0.11, 0.13, 32]} />
+              <meshStandardMaterial
+                color="#FFC627"
+                transparent
+                opacity={opacity}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+          </>
+        );
+      case 'aviator':
+        // Aviator style glasses - teardrop shape
+        return (
+          (() => {
+            // Define the upside-down trapezoid shape for the lens
+            const lensShape = new THREE.Shape();
+            const width = 0.22;
+            const height = 0.18;
+            lensShape.moveTo(-width / 2, height / 2);
+            lensShape.lineTo(width / 2, height / 2);
+            lensShape.lineTo(width / 2 * 0.8, -height / 2);
+            lensShape.lineTo(-width / 2 * 0.8, -height / 2);
+            lensShape.closePath();
+
+            return <>
+            {/* Left Lens */}
+            <mesh position={[-0.16, -0.02, 0.001]} rotation={[0, 0, 0.05]}>
+              <shapeGeometry args={[lensShape]} />
+              <meshStandardMaterial
+                color={color || '#000000'}
+                transparent
+                opacity={opacity * 0.7}
+                metalness={0.3}
+                roughness={0.1}
+                emissive={color}
+              />
+            </mesh>
+            {/* Right Lens */}
+            <mesh position={[0.16, -0.02, 0]} rotation={[0, 0, -0.05]}>
+              <shapeGeometry args={[lensShape]} />
+              <meshStandardMaterial
+                color={color || '#000000'}
+                transparent
+                opacity={opacity * 0.7}
+                metalness={0.3}
+                roughness={0.1}
+                emissive={color}
+              />
+            </mesh>
+            {/* Nose Bridge */}
+            <mesh position={[0, -0.03, 0]}>
+              <boxGeometry args={[0.1, 0.015, 0.02]} />
+              <meshStandardMaterial color="#FFD700" metalness={0.8} roughness={0.2} />
+            </mesh>
+            {/* Left Frame - aviator style with gold frame */}
+            <mesh position={[-0.16, -0.02, 0]} rotation={[0, 0, 0.05]}>
+              <lineSegments>
+                <edgesGeometry args={[new THREE.ShapeGeometry(lensShape)]} />
+                <lineBasicMaterial
+                  color="#FFD700"
+                  transparent
+                  opacity={opacity}
+                />
+              </lineSegments>
+            </mesh>
+            {/* Right Frame */}
+            <mesh position={[0.16, -0.02, 0]} rotation={[0, 0, -0.05]}>
+              <lineSegments>
+                <edgesGeometry args={[new THREE.ShapeGeometry(lensShape)]} />
+                <lineBasicMaterial
+                  color="#FFD700"
+                  transparent
+                  opacity={opacity}
+                />
+              </lineSegments>
+            </mesh>
+          </>
+          })()
+        );
+      case 'cat-eye':
+        // Retro cat-eye style glasses
+        return (
+          <>
+            {/* Left Lens - angled upward */}
+            <mesh position={[-0.16, 0.02, 0]} rotation={[0, 0, -0.2]}>
+              <boxGeometry args={[0.22, 0.14, 0.02]} />
+              <meshStandardMaterial
+                color={color || '#000000'}
+                transparent
+                opacity={opacity * 0.7}
+                metalness={0.2}
+                roughness={0.1}
+                emissive={color}
+              />
+            </mesh>
+            {/* Right Lens - angled upward */}
+            <mesh position={[0.16, 0.02, 0]} rotation={[0, 0, 0.2]}>
+              <boxGeometry args={[0.22, 0.14, 0.02]} />
+              <meshStandardMaterial
+                color={color || '#000000'}
+                transparent
+                opacity={opacity * 0.7}
+                metalness={0.2}
+                roughness={0.1}
+                emissive={color}
+              />
+            </mesh>
+            {/* Left outer wing */}
+            <mesh position={[-0.25, 0.08, 0]} rotation={[0, 0, -0.4]}>
+              <boxGeometry args={[0.1, 0.06, 0.025]} />
+              <meshStandardMaterial
+                color="#FFC627"
+                transparent
+                opacity={opacity}
+                emissive="#FFC627"
+                emissiveIntensity={0.3}
+                metalness={0.5}
+              />
+            </mesh>
+            {/* Right outer wing */}
+            <mesh position={[0.25, 0.08, 0]} rotation={[0, 0, 0.4]}>
+              <boxGeometry args={[0.1, 0.06, 0.025]} />
+              <meshStandardMaterial
+                color="#FFC627"
+                transparent
+                opacity={opacity}
+                emissive="#FFC627"
+                emissiveIntensity={0.3}
+                metalness={0.5}
+              />
+            </mesh>
+            {/* Bridge */}
+            <mesh position={[0, 0, 0]}>
+              <boxGeometry args={[0.08, 0.02, 0.02]} />
+              <meshStandardMaterial color="#FFC627" transparent opacity={opacity} />
+            </mesh>
+          </>
+        );
+      case 'visor':
+        // Futuristic sports visor style
+        return (
+          <>
+            {/* Single wraparound visor lens */}
+            <mesh position={[0, 0.02, 0]}>
+              <cylinderGeometry args={[0.3, 0.3, 0.15, 16, 1, true, 0, Math.PI * 1.5]} />
+              <meshStandardMaterial
+                color={color || '#000000'}
+                transparent
+                opacity={opacity * 0.6}
+                emissive={color}
+                emissiveIntensity={0.4}
+                metalness={0.7}
+                roughness={0.2}
+              />
+            </mesh>
+            {/* Left accent strip */}
+            <mesh position={[-0.2, 0.08, 0.01]}>
+              <boxGeometry args={[0.15, 0.02, 0.01]} />
+              <meshStandardMaterial
+                color="#FFC627"
+                transparent
+                opacity={opacity}
+                emissive="#FFC627"
+                emissiveIntensity={0.6}
+              />
+            </mesh>
+            {/* Right accent strip */}
+            <mesh position={[0.2, 0.08, 0.01]}>
+              <boxGeometry args={[0.15, 0.02, 0.01]} />
+              <meshStandardMaterial
+                color="#FFC627"
+                transparent
+                opacity={opacity}
+                emissive="#FFC627"
+                emissiveIntensity={0.6}
+              />
+            </mesh>
+            {/* Left temple piece */}
+            <mesh position={[-0.28, 0.01, 0]} rotation={[0, -0.2, -0.1]}>
+              <boxGeometry args={[0.1, 0.03, 0.02]} />
+              <meshStandardMaterial
+                color="#8B0000"
+                transparent
+                opacity={opacity}
+                metalness={0.5}
+              />
+            </mesh>
+            {/* Right temple piece */}
+            <mesh position={[0.28, 0.01, 0]} rotation={[0, 0.2, 0.1]}>
+              <boxGeometry args={[0.1, 0.03, 0.02]} />
+              <meshStandardMaterial
+                color="#8B0000"
+                transparent
+                opacity={opacity}
+                metalness={0.5}
+              />
+            </mesh>
+          </>
+        );
+      default: // 'rectangular'
+        // Classic rectangular sunglasses
+        return (
+          <>
+            {/* Left Lens */}
+            <mesh position={[-0.15, 0, 0]}>
+              <boxGeometry args={[0.25, 0.15, 0.02]} />
+              <meshStandardMaterial
+                color={color || '#000000'}
+                transparent
+                opacity={opacity * 0.7}
+                metalness={0.2}
+                roughness={0.1}
+                emissive={color}
+              />
+            </mesh>
+            {/* Right Lens */}
+            <mesh position={[0.15, 0, 0]}>
+              <boxGeometry args={[0.25, 0.15, 0.02]} />
+              <meshStandardMaterial
+                color={color || '#000000'}
+                transparent
+                opacity={opacity * 0.7}
+                metalness={0.2}
+                roughness={0.1}
+                emissive={color}
+              />
+            </mesh>
+            {/* Bridge */}
+            <mesh position={[0, 0, 0]}>
+              <boxGeometry args={[0.1, 0.03, 0.02]} />
+              <meshStandardMaterial color="#FFC627" transparent opacity={opacity} />
+            </mesh>
+            {/* Left Frame - REMOVED */}
+            {/* <mesh position={[-0.15, 0, 0]}>
+              <ringGeometry args={[0.13, 0.15, 16]} />
+              <meshStandardMaterial
+                color="#FFC627"
+                transparent
+                opacity={opacity}
+                side={THREE.DoubleSide}
+              />
+            </mesh> */}
+            {/* Right Frame - REMOVED */}
+            {/* <mesh position={[0.15, 0, 0]}>
+              <ringGeometry args={[0.13, 0.15, 16]} />
+              <meshStandardMaterial
+                color="#FFC627"
+                transparent
+                opacity={opacity}
+                side={THREE.DoubleSide}
+            </mesh> */}
+          </>
+        );
+    }
+  };
+
+  return (
+    <group ref={glassesRef}>
+      {renderGlasses()}
+    </group>
+  );
+}
+
+// 2D Image Mask as a 3D Plane
+function ImageMask({ landmarks, videoWidth, videoHeight, opacity, size = 1.0, imageUrl }) {
+  const maskRef = useRef();
+  const texture = useLoader(THREE.TextureLoader, imageUrl);
+  const smoothingFactor = 0.1;
+  const targetQuaternion = new THREE.Quaternion();
+
+  useFrame(() => {
+    if (!landmarks || !maskRef.current) return;
+
+    // Define key landmark points
+    const noseBridge = landmarks._positions[27];
+    const leftJaw = landmarks._positions[0];
+    const rightJaw = landmarks._positions[16];
+
+    // --- Positioning and Scaling ---
+    // Center the mask on the face using the nose bridge
+    const faceX = (noseBridge.x / videoWidth) * 2 - 1;
+    const faceY = -((noseBridge.y / videoHeight) * 2 - 1);
+
+    // Calculate face width to scale the image appropriately
+    const faceWidth = Math.abs(rightJaw.x - leftJaw.x);
+    const scaleMultiplier = (faceWidth / videoWidth) * 4; // Adjust this multiplier for best fit
+
+    // Calculate head rotation
+    const headAngle = Math.atan2(
+      rightJaw.y - leftJaw.y,
+      rightJaw.x - leftJaw.x
+    );
+
+    // Smooth position
+    const targetPosition = new THREE.Vector3(faceX, faceY - 0.15, 0.1);
+    maskRef.current.position.lerp(targetPosition, smoothingFactor);
+
+    // Smooth rotation
+    targetQuaternion.setFromEuler(new THREE.Euler(0, 0, -headAngle));
+    maskRef.current.quaternion.slerp(targetQuaternion, smoothingFactor);
+
+    maskRef.current.scale.set(scaleMultiplier * size, scaleMultiplier * size, 1);
+  });
+
+  return (
+    <mesh ref={maskRef}>
+      <planeGeometry args={[1, 1]} />
+      <meshBasicMaterial map={texture} transparent opacity={opacity} />
+    </mesh>
+  );
+}
+
+// 3D Sparky Character Component (ASU Mascot)
+function SparkyCharacter({ landmarks, videoWidth, videoHeight, opacity, size = 1.0 }) {
+  const sparkyRef = useRef();
+  const smoothingFactor = 0.1;
+  const targetQuaternion = new THREE.Quaternion();
+
+  useFrame(() => {
+    if (!landmarks || !sparkyRef.current) return;
+
+    const leftJaw = landmarks._positions[1];
+    const rightJaw = landmarks._positions[15];
+
+    // Position Sparky on the left shoulder
+    const shoulderX = (leftJaw.x / videoWidth) * 2 - 1 - 0.3;
+    const shoulderY = -((leftJaw.y / videoHeight) * 2 - 1) - 0.3;
+
+    console.log('SparkyCharacter rendering at:', { shoulderX, shoulderY });
+
+    // Calculate head rotation
+    const headAngle = Math.atan2(
+      rightJaw.y - leftJaw.y,
+      rightJaw.x - leftJaw.x
+    );
+
+    // Smooth position
+    const targetPosition = new THREE.Vector3(shoulderX, shoulderY, 0);
+    sparkyRef.current.position.lerp(targetPosition, smoothingFactor);
+
+    // Smooth rotation
+    targetQuaternion.setFromEuler(new THREE.Euler(0, 0, -headAngle));
+    sparkyRef.current.quaternion.slerp(targetQuaternion, smoothingFactor);
+
+    sparkyRef.current.scale.set(size, size, size);
+  });
+
+  return (
+    <group ref={sparkyRef}>
+      {/* Sparky's Head (wider and more accurate) */}
+      <mesh position={[0, 0.15, 0]} scale={[1.15, 1, 1]}>
+        <sphereGeometry args={[0.1, 32, 32]} />
+        <meshStandardMaterial
+          color="#8B0000"
+          transparent
+          opacity={opacity}
+          emissive="#8B0000"
+          emissiveIntensity={0.3}
+        />
+      </mesh>
+
+      {/* Sparky's Eyes (larger and angled) */}
+      <mesh position={[-0.05, 0.17, 0.08]} scale={[1, 1.2, 1]} rotation={[0, 0, -0.1]}>
+        <sphereGeometry args={[0.02, 16, 16]} />
+        <meshStandardMaterial
+          color="#FFFFFF"
+          transparent
+          opacity={opacity}
+          emissive="#FFFFFF"
+          emissiveIntensity={0.5}
+        />
+      </mesh>
+      <mesh position={[0.05, 0.17, 0.08]} scale={[1, 1.2, 1]} rotation={[0, 0, 0.1]}>
+        <sphereGeometry args={[0.02, 16, 16]} />
+        <meshStandardMaterial
+          color="#FFFFFF"
+          transparent
+          opacity={opacity}
+          emissive="#FFFFFF"
+          emissiveIntensity={0.5}
+        />
+      </mesh>
+
+      {/* Sparky's Pupils */}
+      <mesh position={[-0.05, 0.17, 0.1]}>
+        <sphereGeometry args={[0.01, 16, 16]} />
+        <meshStandardMaterial color="#000000" transparent opacity={opacity} />
+      </mesh>
+      <mesh position={[0.05, 0.17, 0.1]}>
+        <sphereGeometry args={[0.01, 16, 16]} />
+        <meshStandardMaterial color="#000000" transparent opacity={opacity} />
+      </mesh>
+
+      {/* Sparky's Horns */}
+      <mesh position={[-0.1, 0.2, 0]} rotation={[0, 0, -Math.PI / 5]}>
+        <coneGeometry args={[0.025, 0.08, 8]} />
+        <meshStandardMaterial
+          color="#FFC627"
+          transparent
+          opacity={opacity}
+          emissive="#FFC627"
+          emissiveIntensity={0.4}
+          metalness={0.5}
+        />
+      </mesh>
+      <mesh position={[0.1, 0.2, 0]} rotation={[0, 0, Math.PI / 5]}>
+        <coneGeometry args={[0.025, 0.08, 8]} />
+        <meshStandardMaterial
+          color="#FFC627"
+          transparent
+          opacity={opacity}
+          emissive="#FFC627"
+          emissiveIntensity={0.4}
+          metalness={0.5}
+        />
+      </mesh>
+
+      {/* Sparky's Mustache (Custom Smirk) */}
+      <group position={[0, 0.12, 0.09]}>
+        <mesh position={[-0.02, 0, 0]} rotation={[0, 0, 0.6]}>
+          <cylinderGeometry args={[0.01, 0.01, 0.05, 8]} />
+          <meshStandardMaterial color="#FFC627" emissive="#FFC627" emissiveIntensity={0.5} />
+        </mesh>
+        <mesh position={[0.02, 0, 0]} rotation={[0, 0, -0.6]}>
+          <cylinderGeometry args={[0.01, 0.01, 0.05, 8]} />
+          <meshStandardMaterial color="#FFC627" emissive="#FFC627" emissiveIntensity={0.5} />
+        </mesh>
+      </group>
+
+      {/* Sparky's Goatee (sharper) */}
+      <mesh position={[0, 0.09, 0.08]} rotation={[0.1, 0, 0]}>
+        <cylinderGeometry args={[0.005, 0.02, 0.05, 4, 1]} />
+        <meshStandardMaterial
+          color="#FFC627"
+          transparent
+          opacity={opacity}
+          emissive="#FFC627"
+          emissiveIntensity={0.5}
+        />
+      </mesh>
+
+      {/* Sparky's Body (maroon) */}
+      <mesh position={[0, -0.03, 0]}>
+        <cylinderGeometry args={[0.06, 0.08, 0.25, 8]} />
+        <meshStandardMaterial
+          color="#8B0000"
+          transparent
+          opacity={opacity}
+          emissive="#8B0000"
+          emissiveIntensity={0.2}
+        />
+      </mesh>
+
+      {/* Sparky's Arms */}
+      <mesh position={[-0.07, 0.04, 0]} rotation={[0, 0, Math.PI / 8]}>
+        <cylinderGeometry args={[0.015, 0.015, 0.1, 8]} />
+        <meshStandardMaterial color="#8B0000" transparent opacity={opacity} />
+      </mesh>
+      <mesh position={[0.07, 0.04, 0]} rotation={[0, 0, -Math.PI / 8]}>
+        <cylinderGeometry args={[0.015, 0.015, 0.1, 8]} />
+        <meshStandardMaterial color="#8B0000" transparent opacity={opacity} />
+      </mesh>
+
+      {/* Sparky's Legs */}
+      <mesh position={[-0.04, -0.15, 0]}>
+        <cylinderGeometry args={[0.02, 0.015, 0.08, 8]} />
+        <meshStandardMaterial color="#8B0000" transparent opacity={opacity} />
+      </mesh>
+      <mesh position={[0.04, -0.15, 0]}>
+        <cylinderGeometry args={[0.02, 0.015, 0.08, 8]} />
+        <meshStandardMaterial color="#8B0000" transparent opacity={opacity} />
+      </mesh>
+
+      {/* Sparky's Gold Belt */}
+      <mesh position={[0, -0.06, 0]}>
+        <torusGeometry args={[0.07, 0.008, 16, 32]} />
+        <meshStandardMaterial
+          color="#FFC627"
+          transparent
+          opacity={opacity}
+          emissive="#FFC627"
+          emissiveIntensity={0.6}
+          metalness={0.8}
+        />
+      </mesh>
+
+      {/* Sparky's Mini Pitchfork */}
+      <group position={[0.1, 0, 0]} rotation={[0, 0, -Math.PI / 8]}>
+        {/* Pitchfork handle */}
+        <mesh position={[0, -0.08, 0]}>
+          <cylinderGeometry args={[0.008, 0.008, 0.15, 8]} />
+          <meshStandardMaterial color="#8B4513" transparent opacity={opacity} />
+        </mesh>
+        {/* Left prong */}
+        <mesh position={[-0.015, 0.03, 0]}>
+          <cylinderGeometry args={[0.004, 0.004, 0.05, 8]} />
+          <meshStandardMaterial
+            color="#FFC627"
+            transparent
+            opacity={opacity}
+            emissive="#FFC627"
+            emissiveIntensity={0.6}
+          />
+        </mesh>
+        {/* Center prong */}
+        <mesh position={[0, 0.035, 0]}>
+          <cylinderGeometry args={[0.004, 0.004, 0.06, 8]} />
+          <meshStandardMaterial
+            color="#FFC627"
+            transparent
+            opacity={opacity}
+            emissive="#FFC627"
+            emissiveIntensity={0.6}
+          />
+        </mesh>
+        {/* Right prong */}
+        <mesh position={[0.015, 0.03, 0]}>
+          <cylinderGeometry args={[0.004, 0.004, 0.05, 8]} />
+          <meshStandardMaterial
+            color="#FFC627"
+            transparent
+            opacity={opacity}
+            emissive="#FFC627"
+            emissiveIntensity={0.6}
+          />
+        </mesh>
+      </group>
+
+      {/* Sparky's Devil Tail */}
+      <group position={[0.07, -0.16, -0.05]}>
+        <mesh position={[0, 0, 0]} rotation={[0, 0, 0.3]}>
+          <cylinderGeometry args={[0.015, 0.01, 0.1, 8]} />
+          <meshStandardMaterial
+            color="#8B0000"
+            transparent
+            opacity={opacity}
+            emissive="#8B0000"
+            emissiveIntensity={0.2}
+          />
+        </mesh>
+        {/* Tail arrow tip */}
+        <mesh position={[0.03, -0.06, 0]} rotation={[0, 0, 0.3]}>
+          <coneGeometry args={[0.02, 0.04, 6]} />
+          <meshStandardMaterial
+            color="#FFC627"
+            transparent
+            opacity={opacity}
+            emissive="#FFC627"
+            emissiveIntensity={0.4}
+          />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+// 3D Scene Component
+function ARScene({
+  landmarks,
+  videoWidth,
+  videoHeight,
+  opacity,
+  showHorns,
+  showGlasses,
+  showPitchfork,
+  showSparky,
+  showSparkyMask,
+  hornsColor,
+  glassesColor,
+  pitchforkColor,
+  pitchforkHandleColor,
+  hornsSize,
+  glassesSize,
+  pitchforkSize,
+  pitchforkRotation,
+  sparkySize,
+  sparkyMaskSize,
+  hornsStyle,
+  glassesStyle,
+  handLandmarks
+}) {
+  return (
+    <>
+      <ambientLight intensity={0.8} />
+      <pointLight position={[2, 2, 2]} intensity={0.5} />
+      <pointLight position={[-2, -2, 2]} intensity={0.3} />
+
+      {landmarks && (
+        <>
+          {showHorns && (
+            <DevilHorns
+              landmarks={landmarks}
+              videoWidth={videoWidth}
+              videoHeight={videoHeight}
+              opacity={opacity}
+              color={hornsColor}
+              size={hornsSize}
+              style={hornsStyle}
+            />
+          )}
+          {showGlasses && (
+            <Sunglasses
+              landmarks={landmarks}
+              videoWidth={videoWidth}
+              videoHeight={videoHeight}
+              opacity={opacity}
+              color={glassesColor}
+              size={glassesSize}
+              style={glassesStyle}
+            />
+          )}
+          {showSparky && (
+            <SparkyCharacter
+              landmarks={landmarks}
+              videoWidth={videoWidth}
+              videoHeight={videoHeight}
+              opacity={opacity}
+              size={sparkySize}
+            />
+          )}
+        </>
+      )}
+      {showSparkyMask && landmarks && (
+        <ImageMask
+          landmarks={landmarks}
+          videoWidth={videoWidth}
+          videoHeight={videoHeight}
+          opacity={opacity}
+          size={sparkyMaskSize}
+          imageUrl="https://i.imgur.com/XpL3okk.png"
+        />
+      )}
+
+      {/* Hand-held pitchfork appears when hand is detected */}
+      {showPitchfork && handLandmarks && (
+        <HandHeldPitchfork
+          handLandmarks={handLandmarks}
+          color={pitchforkColor}
+          handleColor={pitchforkHandleColor}
+          size={pitchforkSize}
+          rotation={pitchforkRotation}
+        />
+      )}
+    </>
+  );
+}
+
+// Main Component
 export default function ASUSparkyFaceFilter() {
-  // ========== REFS ==========
-  // Refs provide direct access to DOM elements without triggering re-renders
-
-  // Reference to the HTML <video> element that displays the webcam feed
   const videoRef = useRef(null);
-
-  // Reference to the HTML <canvas> element where we draw face detection overlays
   const canvasRef = useRef(null);
-
-  // Reference to store the animation frame ID for the detection loop
-  // This is used to cancel the animation when stopping the camera
   const animationFrameRef = useRef(null);
+  const handsRef = useRef(null); // MediaPipe Hands instance
+  const cameraRef = useRef(null); // MediaPipe Camera instance
 
-  // Reference to store the loaded Sparky image for overlay rendering
-  const sparkyImage = useRef(null);
-
-  // ========== STATE VARIABLES ==========
-  // State variables trigger component re-renders when updated
-
-  // Tracks whether the camera is currently active and running
   const [isActive, setIsActive] = useState(false);
-
-  // Stores any error messages to display to the user
   const [error, setError] = useState(null);
-
-  // Indicates whether the ML models are currently being loaded
   const [isLoading, setIsLoading] = useState(false);
-
-  // Tracks whether the face detection models have finished loading
   const [modelsLoaded, setModelsLoaded] = useState(false);
-
-  // Controls whether facial landmarks are visible on the canvas
-  // When true, shows 68 green landmark dots; when false, hides them
-  const [showLandmarks, setShowLandmarks] = useState(true);
-
-  // Stores the current pep talk message from Sparky
+  const [showLandmarks, setShowLandmarks] = useState(false);
   const [pepTalk, setPepTalk] = useState('');
+  const [opacity, setOpacity] = useState(0.9);
+  const [landmarks, setLandmarks] = useState(null);
+  const [videoSize, setVideoSize] = useState({ width: 640, height: 480 });
 
-  // ========== INITIALIZATION EFFECT ==========
-  // This useEffect runs once when the component mounts (empty dependency array [])
-  // It handles loading the Sparky image and the ML models for face detection
+  const [showQuiz, setShowQuiz] = useState(false);
+
+  // Screenshot selection state
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectionRect, setSelectionRect] = useState(null);
+  const [startPoint, setStartPoint] = useState(null);
+
+  // Hand detection state
+  const [handLandmarks, setHandLandmarks] = useState(null);
+  const [handsLoaded, setHandsLoaded] = useState(false);
+
+  // Accessory toggles
+  const [showHorns, setShowHorns] = useState(true);
+  const [showGlasses, setShowGlasses] = useState(true);
+  const [showPitchfork, setShowPitchfork] = useState(true);
+  const [showSparky, setShowSparky] = useState(true);
+  const [showSparkyMask, setShowSparkyMask] = useState(true);
+
+  // Accessory colors
+  const [hornsColor, setHornsColor] = useState('#8B0000');
+  const [glassesColor, setGlassesColor] = useState('#8B0000');
+  const [pitchforkColor, setPitchforkColor] = useState('#FFC627');
+  const [pitchforkHandleColor, setPitchforkHandleColor] = useState('#8B4513');
+
+  // Accessory sizes
+  const [hornsSize, setHornsSize] = useState(1.0);
+  const [glassesSize, setGlassesSize] = useState(1.0);
+  const [pitchforkSize, setPitchforkSize] = useState(1.0);
+  const [sparkySize, setSparkySize] = useState(1.0);
+  const [sparkyMaskSize, setSparkyMaskSize] = useState(1.0);
+
+  // Accessory rotation
+  const [pitchforkRotation, setPitchforkRotation] = useState(0);
+
+  // Accessory styles
+  const [hornsStyle, setHornsStyle] = useState('devil'); // devil, curved, straight, ram, dragon
+  const [glassesStyle, setGlassesStyle] = useState('rectangular'); // rectangular, round, aviator, cat-eye, visor
+
+  // Load face-api models
   useEffect(() => {
-    // ===== LOAD OVERLAY IMAGE =====
-    // Create a new Image object to hold the Sparky PNG overlay
-    const img = new Image();
-
-    // Enable cross-origin loading for the image (needed for canvas drawing)
-    img.crossOrigin = "anonymous";
-
-    // Load the imported Sparky PNG from assets folder
-    img.src = sparkyPNG;
-    console.log('📸 Loading Sparky PNG from:', sparkyPNG);
-
-    // Add error handling for image loading
-    img.onerror = () => {
-      console.error('❌ Failed to load Sparky PNG! Falling back to SVG...');
-      // Fallback to SVG if PNG fails to load
-      img.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Cdefs%3E%3CradialGradient id='grad1'%3E%3Cstop offset='0%25' style='stop-color:rgb(139,0,0);stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:rgb(220,20,60);stop-opacity:1' /%3E%3C/radialGradient%3E%3C/defs%3E%3Cellipse cx='100' cy='100' rx='80' ry='90' fill='url(%23grad1)' /%3E%3Ccircle cx='75' cy='80' r='8' fill='yellow' /%3E%3Ccircle cx='125' cy='80' r='8' fill='yellow' /%3E%3Cpath d='M 60 60 Q 50 40 55 35 L 50 30' stroke='%238B0000' stroke-width='3' fill='none' /%3E%3Cpath d='M 140 60 Q 150 40 145 35 L 150 30' stroke='%238B0000' stroke-width='3' fill='none' /%3E%3Cpath d='M 80 120 Q 100 135 120 120' stroke='black' stroke-width='3' fill='none' /%3E%3Cpath d='M 85 110 L 75 105 L 80 100' fill='white' /%3E%3Cpath d='M 115 110 L 125 105 L 120 100' fill='white' /%3E%3Ctext x='100' y='170' font-size='24' text-anchor='middle' fill='%23FFC627' font-weight='bold'%3EASU%3C/text%3E%3C/svg%3E";
-    };
-
-    img.onload = () => {
-      console.log('✅ Sparky PNG loaded successfully!');
-    };
-
-    // Store the image in the ref so we can draw it on the canvas later
-    sparkyImage.current = img;
-
-    // ===== LOAD FACE DETECTION MODELS =====
-    /**
-     * Loads the machine learning models required for face detection
-     * These models are loaded from a CDN and cached in the browser
-     *
-     * Models loaded:
-     * 1. TinyFaceDetector - Fast, lightweight face detection model
-     * 2. FaceLandmark68Net - Detects 68 facial landmarks (eyes, nose, mouth, jaw, etc.)
-     */
     const loadModels = async () => {
       try {
-        // Set loading state to show spinner to user
         setIsLoading(true);
-        console.log('Loading face detection models...');
-
-        // CDN URL where the pre-trained model files are hosted
         const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
 
-        // Load both models in parallel using Promise.all for better performance
-        // Each model consists of multiple files (weights, architecture, etc.)
         await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),    // ~300KB face detector
-          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)    // ~350KB landmark detector
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
         ]);
 
-        // Update state to indicate models are ready for use
         setModelsLoaded(true);
         setIsLoading(false);
-        console.log('Face detection models loaded successfully!');
       } catch (err) {
-        // Handle any errors during model loading (network issues, invalid files, etc.)
         console.error('Failed to load models:', err);
         setError(`Failed to load face detection models: ${err.message}`);
         setIsLoading(false);
       }
     };
 
-    // Execute the model loading function
     loadModels();
+  }, []);
 
-    // ===== CLEANUP FUNCTION =====
-    // This function runs when the component unmounts
-    // It cancels any ongoing animation frames to prevent memory leaks
+  // Load MediaPipe Hands from CDN
+  useEffect(() => {
+    const loadHandDetection = async () => {
+      try {
+        console.log('Loading MediaPipe Hands from CDN...');
+
+        // Load MediaPipe Hands script
+        const script1 = document.createElement('script');
+        script1.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js';
+        script1.crossOrigin = 'anonymous';
+
+        const script2 = document.createElement('script');
+        script2.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js';
+        script2.crossOrigin = 'anonymous';
+
+        const loadScript = (script) => {
+          return new Promise((resolve, reject) => {
+            script.onload = () => {
+              console.log(`Loaded: ${script.src}`);
+              resolve();
+            };
+            script.onerror = (err) => {
+              console.error(`Failed to load: ${script.src}`, err);
+              reject(err);
+            };
+            document.head.appendChild(script);
+          });
+        };
+
+        await loadScript(script1);
+        await loadScript(script2);
+
+        // Wait for scripts to initialize
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const { Hands } = window;
+
+        if (!Hands) {
+          throw new Error('MediaPipe Hands not loaded');
+        }
+
+        console.log('Initializing MediaPipe Hands...');
+        const hands = new Hands({
+          locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+          }
+        });
+
+        hands.setOptions({
+          maxNumHands: 1,
+          modelComplexity: 1,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5
+        });
+
+        hands.onResults((results) => {
+          if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            setHandLandmarks(results.multiHandLandmarks[0]);
+          } else {
+            setHandLandmarks(null);
+          }
+        });
+
+        handsRef.current = hands;
+        setHandsLoaded(true);
+        console.log('MediaPipe Hands loaded successfully!');
+      } catch (err) {
+        console.error('Failed to load MediaPipe Hands:', err);
+        // Don't set error state - hand detection is optional
+        console.warn('Hand detection will not be available');
+      }
+    };
+
+    loadHandDetection();
+
+    return () => {
+      if (cameraRef.current) {
+        cameraRef.current.stop();
+      }
+    };
+  }, []);
+
+  // Face detection loop
+  const detectFaces = async () => {
+    if (!videoRef.current || !isActive || !modelsLoaded) return;
+
+    const video = videoRef.current;
+
+    if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+      animationFrameRef.current = requestAnimationFrame(detectFaces);
+      return;
+    }
+
+    try {
+      if (isActive) { // Only schedule the next frame if we are still active
+        animationFrameRef.current = requestAnimationFrame(detectFaces);
+      }
+
+      const detections = await faceapi
+        .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks();
+
+      if (detections.length > 0) {
+        console.log('✓ Face detected! Video size:', video.videoWidth, 'x', video.videoHeight);
+        console.log('✓ Nose bridge landmark:', detections[0].landmarks._positions[27]);
+        setLandmarks(detections[0].landmarks); // videoSize is now set onloadedmetadata
+      } else {
+        console.log('✗ No face detected');
+        setLandmarks(null);
+      }
+    } catch (err) {
+      console.error('Face detection error:', err);
+    }
+  };
+
+  // Start detection when active
+  useEffect(() => {
+    if (isActive && modelsLoaded && videoSize.width > 0) {
+      detectFaces();
+    }
+
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, []); // Empty dependency array means this effect runs only once on mount
+  }, [isActive, modelsLoaded, videoSize]);
 
-  // ========== PEP TALK GENERATOR ==========
+  // Start hand detection when camera becomes active
+  useEffect(() => {
+    if (!isActive || !videoRef.current || !handsLoaded || !window.Camera || cameraRef.current || videoSize.width === 0 || videoSize.height === 0) return;
 
-  /**
-   * Generates a random motivational pep talk from Sparky
-   *
-   * This function creates dynamic, personalized pep talks using:
-   * - ASU-themed motivational phrases
-   * - Sun Devil spirit and tradition
-   * - Encouraging messages for students and fans
-   * - Random selection for variety
-   *
-   * The pep talks are generated client-side with no AI API required
-   */
+    const startHandDetection = async () => {
+      console.log('Starting hand detection...');
+      const { Camera: CameraUtil } = window;
+      const camera = new CameraUtil(videoRef.current, {
+        onFrame: async () => {
+          if (handsRef.current && videoRef.current) {
+            await handsRef.current.send({ image: videoRef.current });
+          }
+        },
+        width: videoSize.width,
+        height: videoSize.height
+      });
+
+      camera.start();
+      cameraRef.current = camera;
+      console.log('Hand detection started!');
+    };
+
+    startHandDetection();
+
+    // Cleanup function to stop the camera when the component unmounts or isActive becomes false
+    return () => {
+      if (cameraRef.current) {
+        cameraRef.current.stop();
+      }
+    };
+  }, [isActive, handsLoaded, videoSize]);
+
+  // This effect activates the scene only after the video size is correctly set.
+  // This prevents race conditions on startup.
+  useEffect(() => {
+    if (videoSize.width > 640 && !isActive) { // Use a width check to ensure it's not the default
+      setIsActive(true);
+    }
+  }, [videoSize, isActive]);
+
+  // Start camera
+  const startCamera = async () => {
+    // Reset accessory states when starting camera
+    setShowHorns(false);
+    setShowGlasses(false);
+    setShowPitchfork(false);
+    setShowSparky(false);
+    setShowSparkyMask(false);
+
+    // Set initial pitchfork rotation to 180 degrees
+    setPitchforkRotation(Math.PI);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: 1280,
+          height: 720,
+          facingMode: 'user'
+        }
+      });
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = async () => {
+          try {
+            setVideoSize({
+              width: videoRef.current.videoWidth,
+              height: videoRef.current.videoHeight
+            });
+            await videoRef.current.play();
+          } catch (err) {
+            setError(`Video playback failed: ${err.message}`);
+          }
+        };
+      }
+    } catch (err) {
+      setError(`Camera error: ${err.message}`);
+    }
+  };
+
+  // Stop camera
+  const stopCamera = () => {
+    // Simply setting isActive to false will trigger the cleanup functions in the useEffect hooks
+    // which is the correct React way to handle this.
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+
+    setIsActive(false);
+    setLandmarks(null);
+    setHandLandmarks(null);
+    setVideoSize({ width: 640, height: 480 }); // Reset video size to prevent immediate restart
+  };
+
+  // Generate pep talk
   const generatePepTalk = () => {
-    // Array of pep talk templates with ASU spirit
     const pepTalks = [
       "You've got that Sun Devil fire! 🔱 Keep pushing forward and Fork 'Em Devils!",
       "Sparky believes in you! You're unstoppable, just like our Sun Devils! 🌟",
       "Fear the Fork! You're doing amazing - ASU pride runs through your veins! 💛❤️",
       "Maroon and Gold flows through you! Stay strong and show that Devil determination! 🔱",
       "You're a true Sun Devil! Keep that innovation and excellence going! ⚡",
-      "Sparky says: You're crushing it! Channel that ASU spirit and conquer the day! 🎉",
       "Forks Up! You've got this - show the world what Sun Devil strength looks like! 💪",
       "From Tempe to the world! Your ASU pride is shining bright today! ✨",
-      "You embody the Sun Devil way! Stay fierce, stay focused, Fork 'Em! 🔥",
-      "Sparky's pumped and so should you be! You're making Sun Devil Nation proud! 🎊",
-      "Rise up like a true Sun Devil! Your potential is as limitless as the Arizona sky! 🌅",
-      "Fear the Pitchfork! You're radiating that championship energy! 🏆",
-      "You're glowing with Maroon and Gold excellence! Keep being legendary! 💫",
-      "Sparky sees a winner! Keep that ASU innovation spirit burning bright! 🚀",
-      "Forks up, head high! You're representing Sun Devil Nation with pride! 🔱",
-      "From one Sun Devil to another: You're absolutely killing it! Fork 'Em! ⚡",
-      "You've got that Tempe heat! Keep blazing your trail to success! 🌞",
-      "Sparky's rooting for you! Show the world what ASU excellence looks like! 🌟",
-      "Sun Devil strong! Your determination is as fierce as our mascot! 💪🔱",
-      "You're a champion in Maroon and Gold! Keep that winning mentality! 🏆💛",
-      "Innovation is in your DNA! ASU proud and ready to change the world! 🌍",
-      "Tempe vibes and Sun Devil pride! You're on fire today! 🔥",
-      "No mountain too high for a Sun Devil! Keep climbing! ⛰️",
-      "Your ASU spirit is contagious! Spread that Maroon and Gold energy! 💛❤️",
-      "Sparky knows you're destined for greatness! Keep shining bright! ⭐",
-      "From the Valley of the Sun to victory! You've got this! ☀️",
-      "Devil determination meets Sun Devil innovation! Unstoppable combo! 🚀",
-      "ASU excellence runs deep in you! Keep making us proud! 🎓",
-      "Forks up, chin up, never give up! That's the Sun Devil way! 🔱",
-      "You're not just good, you're Sun Devil GREAT! Fork 'Em! 💪",
-      "Sparky sees that championship mindset! Keep pushing forward! 🏆",
-      "Maroon blood, Gold heart! You're a true Sun Devil warrior! ⚔️",
-      "From Hayden Lawn to the world stage! Your journey is just beginning! 🌟",
-      "ASU spirit never quits! And neither do you! Let's go! 🎉",
-      "You've got that Pitchfork power! Nothing can stop you now! ⚡",
-      "Sun Devil Nation is behind you! Feel that energy! 🔥",
-      "Fear the Fork, embrace the challenge! You're ready for anything! 💪",
-      "Sparky's cheering for you from the sidelines! Go get 'em! 📣",
-      "Tempe tough, ASU proud! You embody excellence! ✨",
-      "Your Sun Devil spirit lights up the desert! Keep glowing! 🌵",
-      "Innovation Station! You're creating the future, Sun Devil! 🚂",
-      "From Mill Avenue to Millionaire mindset! Dream big! 💰",
-      "Sparky says: You're the MVP of your own story! 🏅",
-      "Maroon and Gold never fold! Your resilience is incredible! 🔱",
-      "Sun Devil stamina! You've got endless energy and passion! 💥",
-      "ASU proud, head unbowed! You're conquering today! 👑",
-      "Fork the limits! You're breaking barriers, Sun Devil! 🚧",
-      "Sparky vibes: 100% positive, 100% powerful! That's you! ✅",
-      "Desert heat can't match your Sun Devil fire! Blazing! 🏜️",
-      "You're writing your ASU legacy right now! Make it legendary! 📖"
+      "Sparky's pumped and so should you be! You're making Sun Devil Nation proud! 🎊"
     ];
 
-    // Randomly select a pep talk
-    const randomIndex = Math.floor(Math.random() * pepTalks.length);
-    const selectedPepTalk = pepTalks[randomIndex];
-
-    // Update the state with the new pep talk
-    setPepTalk(selectedPepTalk);
-
-    // Log for debugging
-    console.log('Generated pep talk:', selectedPepTalk);
+    setPepTalk(pepTalks[Math.floor(Math.random() * pepTalks.length)]);
   };
 
-  // ========== CAMERA CONTROL FUNCTIONS ==========
-
-  /**
-   * Starts the user's webcam and begins the video stream
-   *
-   * This function:
-   * 1. Requests permission to access the user's camera
-   * 2. Sets up the video stream with specific resolution
-   * 3. Connects the stream to the video element
-   * 4. Handles playback and updates the active state
-   *
-   * @async
-   */
-  const startCamera = async () => {
-    console.log('Starting camera...');
-    try {
-      // Request access to the user's camera via the MediaDevices API
-      // This will trigger a browser permission prompt if not already granted
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: 640,          // Request 640px width (VGA resolution)
-          height: 480,         // Request 480px height (4:3 aspect ratio)
-          facingMode: 'user'   // Use front-facing camera (for selfies)
-        }
-      });
-
-      // Check if the video element ref is available
-      if (videoRef.current) {
-        // Attach the camera stream to the video element
-        // This connects the live camera feed to the <video> tag
-        videoRef.current.srcObject = stream;
-
-        // Set up an event listener for when the video metadata is loaded
-        // Metadata includes video dimensions, duration, etc.
-        videoRef.current.onloadedmetadata = () => {
-          // Attempt to start playing the video
-          videoRef.current.play().then(() => {
-            console.log('Video playing successfully');
-            setIsActive(true);    // Update state to indicate camera is active
-            setError(null);       // Clear any previous errors
-          }).catch(err => {
-            // Handle errors during video playback (autoplay restrictions, etc.)
-            console.error('Video play error:', err);
-            setError(`Video playback failed: ${err.message}`);
-          });
-        };
-      }
-    } catch (err) {
-      // Handle errors during camera access (permission denied, no camera, etc.)
-      console.error('Camera error details:', err);
-      setError(`Camera error: ${err.name} - ${err.message}`);
-    }
+  // Redirect to ASU Quiz
+  const redirectToQuiz = () => {
+    setShowQuiz(true);
   };
 
-  /**
-   * Stops the webcam and cleans up all related resources
-   *
-   * This function:
-   * 1. Stops all media tracks (camera stream)
-   * 2. Cancels the face detection animation loop
-   * 3. Clears the video element
-   * 4. Updates the active state
-   */
-  const stopCamera = () => {
-    // Check if the video element has an active stream
-    if (videoRef.current && videoRef.current.srcObject) {
-      // Get the MediaStream object from the video element
-      const stream = videoRef.current.srcObject;
-
-      // Get all tracks (video and audio, though we only use video)
-      const tracks = stream.getTracks();
-
-      // Stop each track to release the camera
-      // This turns off the camera light and frees the hardware
-      tracks.forEach(track => track.stop());
-
-      // Clear the video element's source to remove the stream
-      videoRef.current.srcObject = null;
-    }
-
-    // Cancel the ongoing face detection animation loop
-    // This stops the continuous frame-by-frame processing
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-    }
-
-    // Update state to indicate camera is no longer active
-    setIsActive(false);
-  };
-
-  // ========== FACE DETECTION LOOP ==========
-
-  /**
-   * Main face detection and rendering loop
-   *
-   * This function runs continuously (via requestAnimationFrame) and:
-   * 1. Captures the current video frame
-   * 2. Runs face detection ML models on the frame
-   * 3. Extracts 68 facial landmarks for each detected face
-   * 4. Draws the video frame, landmarks, and Sparky overlay on canvas
-   * 5. Adds text overlays and branding
-   * 6. Schedules itself to run again on the next frame (~60fps)
-   *
-   * The 68 facial landmarks represent key points on the face:
-   * - Points 0-16: Jaw line
-   * - Points 17-21: Left eyebrow
-   * - Points 22-26: Right eyebrow
-   * - Points 27-35: Nose
-   * - Points 36-41: Left eye
-   * - Points 42-47: Right eye
-   * - Points 48-67: Mouth
-   *
-   * @async
-   */
-  const detectFaces = async () => {
-    // Safety check: ensure all required elements and states are ready
-    // Exit early if video, canvas, or models aren't available
-    if (!videoRef.current || !canvasRef.current || !isActive || !modelsLoaded) return;
-
-    // Get references to video and canvas elements
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d'); // Get 2D drawing context for canvas
-
-    // Check if video has enough data loaded to process
-    // HAVE_ENOUGH_DATA means we have frames available to read
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      // ===== SETUP CANVAS =====
-      // Match canvas dimensions to actual video dimensions
-      const displaySize = { width: video.videoWidth, height: video.videoHeight };
-      canvas.width = displaySize.width;
-      canvas.height = displaySize.height;
-
-      // Clear the canvas from the previous frame
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Draw the current video frame onto the canvas
-      // This provides the background for our overlays
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      try {
-        // ===== RUN FACE DETECTION =====
-        // Use the face-api library to detect all faces in the current frame
-        const detections = await faceapi
-          .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({
-            inputSize: 320,        // Input size for the model (larger = slower but more accurate)
-            scoreThreshold: 0.5    // Confidence threshold (0-1, higher = stricter)
-          }))
-          .withFaceLandmarks();    // Also detect 68 facial landmarks for each face
-
-        console.log(`Faces detected: ${detections.length}`);
-
-        // ===== PROCESS DETECTED FACES =====
-        if (detections.length > 0) {
-          // Get the first detected face (we only process one face at a time)
-          const detection = detections[0];
-          const landmarks = detection.landmarks;  // 68 facial landmark points
-          const box = detection.detection.box;    // Bounding box around the face
-
-          console.log('Face detected at:', box);
-
-          // ===== DRAW FACE BOUNDING BOX =====
-          // Draw a red rectangle around the detected face (draw this first, before Sparky)
-          ctx.strokeStyle = '#FF0000';  // Red color
-          ctx.lineWidth = 3;
-          ctx.strokeRect(box.x, box.y, box.width, box.height);
-
-          // ===== OVERLAY SPARKY IMAGE =====
-          // Calculate Sparky overlay size and position
-          const scale = 1.5;  // Make Sparky 50% larger than the face
-          const sparkyWidth = box.width * scale;
-          const sparkyHeight = box.height * scale;
-
-          // Center Sparky on the face by calculating offset
-          const sparkyX = box.x - (sparkyWidth - box.width) / 2;
-          const sparkyY = box.y - (sparkyHeight - box.height) / 2;
-
-          // Draw the Sparky image if it's fully loaded
-          if (sparkyImage.current.complete) {
-            ctx.globalAlpha = 0.5;  // Set 50% transparency for the overlay
-            ctx.drawImage(sparkyImage.current, sparkyX, sparkyY, sparkyWidth, sparkyHeight);
-            ctx.globalAlpha = 1.0;  // Reset to full opacity for subsequent drawings
-          }
-
-          // ===== ADD TEXT OVERLAYS =====
-          // Draw "Go Sun Devils!" text with outline (stroke + fill for bold effect)
-          ctx.fillStyle = '#FFC627';        // ASU gold color
-          ctx.font = 'bold 24px Arial';
-          ctx.strokeStyle = '#8B0000';      // Dark red outline
-          ctx.lineWidth = 3;
-          ctx.strokeText('Go Sun Devils!', 20, canvas.height - 20);  // Draw outline
-          ctx.fillText('Go Sun Devils!', 20, canvas.height - 20);    // Draw fill
-
-          // ===== DRAW FACIAL LANDMARKS (ON TOP OF EVERYTHING) =====
-          // DEBUG: Log landmark visibility state
-          console.log('showLandmarks state:', showLandmarks);
-          console.log('Number of landmark positions:', landmarks.positions.length);
-
-          // Only draw landmarks if the user has enabled them
-          if (showLandmarks) {
-            // Get all 68 landmark positions (x, y coordinates)
-            const positions = landmarks.positions;
-
-            // DEBUG: Log that we're about to draw landmarks
-            console.log('Drawing landmarks now...');
-
-            // Draw each landmark as a bright green dot with yellow outline
-            // Drawing AFTER Sparky overlay so landmarks appear on top
-            positions.forEach((point, index) => {
-              ctx.beginPath();
-              // Draw a larger circle at each landmark position (8px for maximum visibility)
-              ctx.arc(point.x, point.y, 8, 0, 2 * Math.PI);
-              ctx.fillStyle = '#00FF00';  // Bright green fill
-              ctx.fill();
-              ctx.strokeStyle = '#FFFF00';  // Yellow border for contrast
-              ctx.lineWidth = 3;
-              ctx.stroke();
-            });
-
-            // DEBUG: Confirm landmarks were drawn
-            console.log(`Drew ${positions.length} landmarks`);
-          } else {
-            // DEBUG: Log that landmarks are hidden
-            console.log('Landmarks are hidden by user toggle');
-          }
-
-          // ===== DEBUG INFO PANEL =====
-          // Show comprehensive debug info in top-left corner
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';  // Semi-transparent black background
-          ctx.fillRect(10, 10, 400, 120);  // Debug panel background
-
-          // Landmark status
-          ctx.fillStyle = showLandmarks ? '#00FF00' : '#FF0000';  // Green if shown, red if hidden
-          ctx.font = 'bold 18px Arial';
-          ctx.fillText(
-            `Landmarks: ${showLandmarks ? 'VISIBLE ✓' : 'HIDDEN ✗'}`,
-            20,
-            35
-          );
-
-          // Detection count
-          ctx.fillStyle = '#FFFFFF';
-          ctx.font = 'bold 14px Arial';
-          ctx.fillText(`Faces detected: ${detections.length}`, 20, 60);
-          ctx.fillText(`Landmark points: ${landmarks.positions.length}`, 20, 80);
-          ctx.fillText(`Canvas size: ${canvas.width}x${canvas.height}`, 20, 100);
-          ctx.fillText(`showLandmarks state: ${showLandmarks}`, 20, 120);
-        } else {
-          // ===== NO FACE DETECTED =====
-          // Display a helpful message to the user
-          ctx.fillStyle = 'rgba(255, 255, 0, 0.8)';  // Semi-transparent yellow
-          ctx.font = 'bold 20px Arial';
-          ctx.fillText('No face detected - move closer or improve lighting', 20, 40);
-        }
-      } catch (err) {
-        // Log any errors during face detection (shouldn't happen often)
-        console.error('Face detection error:', err);
-      }
-    }
-
-    // ===== SCHEDULE NEXT FRAME =====
-    // Request the browser to call this function again before the next repaint
-    // This creates a smooth animation loop running at ~60fps
-    animationFrameRef.current = requestAnimationFrame(detectFaces);
-  };
-
-  // ========== LANDMARK DEBUG EFFECT ==========
-  // This useEffect logs whenever showLandmarks changes
-  useEffect(() => {
-    console.log('✨ showLandmarks state changed to:', showLandmarks);
-  }, [showLandmarks]);
-
-  // ========== DETECTION EFFECT ==========
-  // This useEffect starts the face detection loop when the camera becomes active
-  // and stops it when the camera is turned off or component unmounts
-  useEffect(() => {
-    console.log('🎬 Detection effect triggered. isActive:', isActive, 'modelsLoaded:', modelsLoaded, 'showLandmarks:', showLandmarks);
-
-    // Start the detection loop only when both conditions are met:
-    // 1. Camera is active (isActive = true)
-    // 2. ML models have finished loading (modelsLoaded = true)
-    if (isActive && modelsLoaded) {
-      console.log('🚀 Starting detection loop...');
-      detectFaces();  // Kick off the first frame of the detection loop
-    }
-
-    // Cleanup function that runs when the component unmounts or dependencies change
-    return () => {
-      if (animationFrameRef.current) {
-        console.log('🛑 Canceling animation frame...');
-        // Cancel the animation frame to stop the detection loop
-        // This prevents memory leaks and unnecessary processing
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, [isActive, modelsLoaded, showLandmarks]);  // Re-run effect when landmarks toggle changes
-
-  // ========== STYLES ==========
-  // Inline CSS-in-JS styles for all UI components
-  // Using inline styles for this component instead of separate CSS files
-  // Responsive design implemented with flexible units and proper padding/margins
+  // Styles
   const styles = {
     container: {
       minHeight: '100vh',
@@ -530,40 +1492,37 @@ export default function ASUSparkyFaceFilter() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: 'clamp(10px, 3vw, 20px)',  // Responsive padding: 10px-20px based on viewport
+      padding: '20px',
       fontFamily: 'Arial, sans-serif'
-    },
-    maxWidth: {
-      maxWidth: '1200px',
-      width: '100%'
     },
     card: {
       background: '#2d2d2d',
-      borderRadius: 'clamp(10px, 2vw, 20px)',  // Responsive border radius
+      borderRadius: '20px',
       boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
       overflow: 'hidden',
-      border: 'clamp(2px, 0.5vw, 4px) solid #FFC627'  // Responsive border width
+      border: '4px solid #FFC627',
+      maxWidth: '1200px',
+      width: '100%'
     },
     header: {
       background: 'linear-gradient(90deg, #8B0000 0%, #FFC627 100%)',
-      padding: 'clamp(15px, 4vw, 30px)',  // Responsive padding
+      padding: '30px',
       textAlign: 'center'
     },
     title: {
-      fontSize: 'clamp(1.5rem, 5vw, 2.5rem)',  // Responsive font: 1.5rem on mobile, 2.5rem on desktop
+      fontSize: '2.5rem',
       fontWeight: 'bold',
       color: 'white',
-      marginBottom: '10px',
       margin: 0,
-      lineHeight: '1.2'  // Better text wrapping on small screens
+      marginBottom: '10px'
     },
     subtitle: {
       color: '#FFF8DC',
-      fontSize: 'clamp(0.9rem, 2.5vw, 1.1rem)',  // Responsive subtitle
+      fontSize: '1.1rem',
       margin: 0
     },
     cameraSection: {
-      padding: 'clamp(15px, 4vw, 30px)',  // Responsive padding
+      padding: '30px',
       background: '#1a1a1a'
     },
     videoContainer: {
@@ -571,7 +1530,7 @@ export default function ASUSparkyFaceFilter() {
       background: 'black',
       borderRadius: '10px',
       overflow: 'hidden',
-      aspectRatio: '4/3',
+      aspectRatio: '16/9',
       width: '100%'
     },
     placeholder: {
@@ -581,389 +1540,696 @@ export default function ASUSparkyFaceFilter() {
       alignItems: 'center',
       justifyContent: 'center',
       background: '#333',
-      textAlign: 'center',
-      flexDirection: 'column'
-    },
-    placeholderContent: {
-      color: '#FFF8DC',
-      padding: '20px'
-    },
-    placeholderText: {
-      fontSize: 'clamp(1rem, 3vw, 1.3rem)',  // Responsive text
-      marginBottom: '20px',
-      color: '#FFF8DC'
-    },
-    button: {
-      background: 'linear-gradient(90deg, #DC143C 0%, #FFC627 100%)',
-      color: 'white',
-      fontWeight: 'bold',
-      padding: 'clamp(12px, 2vw, 15px) clamp(25px, 5vw, 40px)',  // Responsive button padding
-      borderRadius: '50px',
-      border: 'none',
-      fontSize: 'clamp(0.95rem, 2.5vw, 1.1rem)',  // Responsive font
-      cursor: 'pointer',
-      transition: 'all 0.3s ease',
-      boxShadow: '0 4px 15px rgba(220, 20, 60, 0.4)',
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '10px',
-      justifyContent: 'center',  // Center content on smaller screens
-      width: 'auto',  // Allow button to shrink on mobile
-      minWidth: 'fit-content'
-    },
-    stopButton: {
-      background: '#DC143C',
-      color: 'white',
-      fontWeight: 'bold',
-      padding: 'clamp(12px, 2vw, 15px) clamp(25px, 5vw, 40px)',  // Responsive button padding
-      borderRadius: '50px',
-      border: 'none',
-      fontSize: 'clamp(0.95rem, 2.5vw, 1.1rem)',  // Responsive font
-      cursor: 'pointer',
-      transition: 'all 0.3s ease',
-      boxShadow: '0 4px 15px rgba(220, 20, 60, 0.4)',
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '10px',
-      justifyContent: 'center',  // Center content on smaller screens
-      width: 'auto',
-      minWidth: 'fit-content'
-    },
-    toggleButton: {
-      background: '#FFC627',  // ASU gold
-      color: '#8B0000',       // Dark red text
-      fontWeight: 'bold',
-      padding: 'clamp(12px, 2vw, 15px) clamp(25px, 5vw, 40px)',  // Responsive button padding
-      borderRadius: '50px',
-      border: 'none',
-      fontSize: 'clamp(0.95rem, 2.5vw, 1.1rem)',  // Responsive font
-      cursor: 'pointer',
-      transition: 'all 0.3s ease',
-      boxShadow: '0 4px 15px rgba(255, 198, 39, 0.4)',
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '10px',
-      justifyContent: 'center',
-      width: 'auto',
-      minWidth: 'fit-content',
-      marginLeft: 'clamp(10px, 2vw, 15px)'  // Space between buttons
-    },
-    pepTalkButton: {
-      background: 'linear-gradient(90deg, #8B0000 0%, #FFC627 100%)',
-      color: 'white',
-      fontWeight: 'bold',
-      padding: 'clamp(12px, 2vw, 15px) clamp(25px, 5vw, 40px)',
-      borderRadius: '50px',
-      border: 'none',
-      fontSize: 'clamp(0.95rem, 2.5vw, 1.1rem)',
-      cursor: 'pointer',
-      transition: 'all 0.3s ease',
-      boxShadow: '0 4px 15px rgba(139, 0, 0, 0.4)',
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '10px',
-      justifyContent: 'center',
-      width: '100%',
-      marginTop: '15px'
-    },
-    pepTalkBox: {
-      marginTop: '20px',
-      background: 'linear-gradient(135deg, #8B0000 0%, #DC143C 100%)',
-      border: '3px solid #FFC627',
-      padding: 'clamp(15px, 3vw, 20px)',
-      borderRadius: '15px',
-      minHeight: '80px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      boxShadow: '0 8px 25px rgba(255, 198, 39, 0.3)'
-    },
-    pepTalkText: {
-      color: 'white',
-      fontSize: 'clamp(1rem, 2.5vw, 1.2rem)',
-      fontWeight: '600',
-      textAlign: 'center',
-      lineHeight: '1.6',
-      margin: 0
+      flexDirection: 'column',
+      zIndex: 10
     },
     video: {
       position: 'absolute',
       inset: 0,
       width: '100%',
       height: '100%',
-      objectFit: 'cover'
+      objectFit: 'cover',
+      transform: 'scaleX(-1)'
     },
     canvas: {
       position: 'absolute',
       inset: 0,
       width: '100%',
       height: '100%',
-      objectFit: 'cover'
+      zIndex: 5,
+      pointerEvents: 'none',
+      transform: 'scaleX(-1)' // Mirror to match video
     },
-    errorBox: {
-      marginTop: '20px',
-      background: '#8B0000',
-      borderLeft: '4px solid #DC143C',
-      padding: 'clamp(10px, 2vw, 15px)',  // Responsive padding
-      borderRadius: '5px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '10px',
-      flexWrap: 'wrap'  // Wrap on very small screens
+    selectionOverlay: {
+      position: 'absolute',
+      inset: 0,
+      cursor: 'crosshair',
+      zIndex: 20,
     },
-    errorText: {
-      color: '#FFB6C1',
-      margin: 0,
-      fontSize: 'clamp(0.85rem, 2vw, 1rem)'  // Responsive text
+    selectionBox: {
+      position: 'absolute',
+      border: '2px dashed #FFC627',
+      backgroundColor: 'rgba(255, 198, 39, 0.2)',
+      pointerEvents: 'none',
+      zIndex: 21,
     },
-    loadingBox: {
-      marginTop: '20px',
-      background: '#B8860B',
-      borderLeft: '4px solid #FFC627',
-      padding: 'clamp(10px, 2vw, 15px)',  // Responsive padding
-      borderRadius: '5px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '10px',
-      flexWrap: 'wrap'  // Wrap on very small screens
-    },
-    loadingText: {
-      color: '#FFF8DC',
-      margin: 0,
-      fontSize: 'clamp(0.85rem, 2vw, 1rem)'  // Responsive text
+    button: {
+      background: 'linear-gradient(90deg, #DC143C 0%, #FFC627 100%)',
+      color: 'white',
+      fontWeight: 'bold',
+      padding: '15px 40px',
+      borderRadius: '50px',
+      border: 'none',
+      fontSize: '1.1rem',
+      cursor: 'pointer'
     },
     controls: {
-      marginTop: 'clamp(15px, 4vw, 30px)',  // Responsive margin
+      marginTop: '30px',
       display: 'flex',
       justifyContent: 'center',
-      flexWrap: 'wrap',  // Wrap buttons on very small screens
-      gap: '10px'  // Space between buttons when they wrap
+      gap: '10px',
+      flexWrap: 'wrap'
     },
     footer: {
       background: '#2d2d2d',
-      padding: 'clamp(15px, 3vw, 20px)',  // Responsive padding
+      padding: '20px',
       textAlign: 'center',
       borderTop: '2px solid #FFC627'
-    },
-    footerText: {
-      color: '#FFC627',
-      fontWeight: '600',
-      margin: 0,
-      fontSize: 'clamp(0.85rem, 2vw, 1rem)'  // Responsive text
-    },
-    instructions: {
-      marginTop: 'clamp(15px, 4vw, 30px)',  // Responsive margin
-      background: '#2d2d2d',
-      borderRadius: '10px',
-      padding: 'clamp(15px, 4vw, 30px)',  // Responsive padding
-      border: '2px solid #FFC627'
-    },
-    instructionsTitle: {
-      fontSize: 'clamp(1.2rem, 3.5vw, 1.5rem)',  // Responsive title
-      fontWeight: 'bold',
-      color: '#FFC627',
-      marginBottom: '15px',
-      marginTop: 0
-    },
-    instructionsList: {
-      color: '#ccc',
-      listStyle: 'none',
-      padding: 0,
-      margin: 0
-    },
-    instructionItem: {
-      marginBottom: '10px',
-      fontSize: 'clamp(0.9rem, 2.2vw, 1.05rem)'  // Responsive list items
-    },
-    spinner: {
-      animation: 'spin 1s linear infinite'
-    },
-    debugPanel: {
-      marginTop: '20px',
-      background: 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)',
-      border: '3px solid #00FF00',
-      padding: 'clamp(15px, 3vw, 20px)',
-      borderRadius: '10px',
-      fontFamily: 'monospace'
-    },
-    debugTitle: {
-      color: '#00FF00',
-      fontSize: 'clamp(1.1rem, 2.5vw, 1.3rem)',
-      fontWeight: 'bold',
-      marginBottom: '15px',
-      textAlign: 'center'
-    },
-    debugItem: {
-      color: '#FFC627',
-      fontSize: 'clamp(0.95rem, 2.2vw, 1.1rem)',
-      marginBottom: '8px',
-      padding: '5px',
-      background: 'rgba(255, 198, 39, 0.1)',
-      borderRadius: '5px'
     }
   };
 
-  // ========== COMPONENT RENDER ==========
-  // Returns the JSX that defines the component's UI structure
+  // --- Interactive Screenshot Logic ---
+
+  const startSelection = () => {
+    setIsSelecting(true);
+    // Add a listener to exit selection mode with the Escape key
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsSelecting(false);
+        setSelectionRect(null);
+        setStartPoint(null);
+        window.removeEventListener('keydown', handleKeyDown);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+  };
+
+  const handleMouseDown = (e) => {
+    if (!isSelecting) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setStartPoint({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    setSelectionRect({ x: e.clientX - rect.left, y: e.clientY - rect.top, width: 0, height: 0 });
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isSelecting || !startPoint) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const currentX = e.clientX - rect.left;
+    const currentY = e.clientY - rect.top;
+
+    const newRect = {
+      x: Math.min(startPoint.x, currentX),
+      y: Math.min(startPoint.y, currentY),
+      width: Math.abs(currentX - startPoint.x),
+      height: Math.abs(currentY - startPoint.y),
+    };
+    setSelectionRect(newRect);
+  };
+
+  const handleMouseUp = () => {
+    if (!isSelecting || !selectionRect || selectionRect.width === 0 || selectionRect.height === 0) {
+      // If selection is invalid, just exit selection mode
+      setIsSelecting(false);
+      setStartPoint(null);
+      setSelectionRect(null);
+      return;
+    }
+
+    // Capture the selected region
+    const video = videoRef.current;
+    const threeCanvas = canvasRef.current;
+    const videoRect = video.getBoundingClientRect();
+
+    const scaleX = video.videoWidth / videoRect.width;
+    const scaleY = video.videoHeight / videoRect.height;
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = selectionRect.width * scaleX;
+    tempCanvas.height = selectionRect.height * scaleY;
+    const ctx = tempCanvas.getContext('2d');
+
+    // Draw the selected region from the video and 3D canvas
+    const sourceX = (videoRect.width - selectionRect.x - selectionRect.width) * scaleX; // Mirrored source X
+    const sourceY = selectionRect.y * scaleY;
+
+    // 1. Draw mirrored video portion
+    ctx.drawImage(video, sourceX, sourceY, tempCanvas.width, tempCanvas.height, 0, 0, tempCanvas.width, tempCanvas.height);
+
+    // 2. Draw mirrored 3D canvas portion
+    ctx.drawImage(threeCanvas, sourceX, sourceY, tempCanvas.width, tempCanvas.height, 0, 0, tempCanvas.width, tempCanvas.height);
+
+    // 3. Download the image
+    const link = document.createElement('a');
+    link.download = `asu-sparky-crop-${Date.now()}.png`;
+    link.href = tempCanvas.toDataURL('image/png');
+    link.click();
+
+    // Exit selection mode
+    setIsSelecting(false);
+    setStartPoint(null);
+    setSelectionRect(null);
+  };
+
   return (
-    // Main container with gradient background
     <div style={styles.container}>
-      <style>
-        {`
-          @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-          }
-        `}
-      </style>
-      <div style={styles.maxWidth}>
-        <div style={styles.card}>
-          <div style={styles.header}>
-            <h1 style={styles.title}>
-              🔱 ASU Sparky Face Filter 🔱
-            </h1>
-            <p style={styles.subtitle}>
-              Become a Sun Devil! Fork 'Em! 😈
-            </p>
-          </div>
+      <div style={styles.card}>
+        <div style={styles.header}>
+          <h1 style={styles.title}>🔱 ASU Sparky AR Face Filter 🔱</h1>
+          <p style={styles.subtitle}>3D AR Accessories with Three.js! Fork 'Em! 😈</p>
+        </div>
 
-          <div style={styles.cameraSection}>
-            <div style={styles.videoContainer}>
-              {!isActive && (
-                <div style={styles.placeholder}>
-                  <div style={styles.placeholderContent}>
-                    <Camera size={80} color="#FFC627" style={{ marginBottom: '20px' }} />
-                    <p style={styles.placeholderText}>Ready to transform into Sparky?</p>
-                    <button
-                      onClick={startCamera}
-                      style={styles.button}
-                      disabled={isLoading || !modelsLoaded}
-                      onMouseOver={(e) => !e.target.disabled && (e.target.style.transform = 'scale(1.05)')}
-                      onMouseOut={(e) => e.target.style.transform = 'scale(1)'}
-                    >
-                      {isLoading ? 'Loading Models...' : 'Start Camera'}
-                    </button>
-                  </div>
-                </div>
-              )}
-              
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                style={{...styles.video, display: isActive ? 'block' : 'none'}}
-              />
-              
-              <canvas
-                ref={canvasRef}
-                style={{...styles.canvas, display: isActive ? 'block' : 'none'}}
-              />
-            </div>
-
-            {isLoading && (
-              <div style={styles.loadingBox}>
-                <Loader color="#FFF8DC" style={styles.spinner} />
-                <p style={styles.loadingText}>
-                  Loading face detection models from CDN... This may take a moment.
+        <div style={styles.cameraSection}>
+          <div
+            style={styles.videoContainer}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+          >
+            {!isActive && (
+              <div style={styles.placeholder}>
+                <Camera size={80} color="#FFC627" style={{ marginBottom: '20px' }} />
+                <p style={{ color: '#FFF8DC', fontSize: '1.2rem', marginBottom: '20px' }}>
+                  Ready for 3D AR?
                 </p>
+                <button
+                  onClick={startCamera}
+                  style={styles.button}
+                  disabled={isLoading || !modelsLoaded}
+                >
+                  {isLoading ? 'Loading Models...' : 'Start AR Camera'}
+                </button>
               </div>
             )}
 
-            {error && (
-              <div style={styles.errorBox}>
-                <AlertCircle color="#FFB6C1" />
-                <p style={styles.errorText}>{error}</p>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              style={{ ...styles.video, display: isActive ? 'block' : 'none' }}
+            />
+
+            {isSelecting && (
+              <div style={styles.selectionOverlay}>
+                {selectionRect && (
+                  <div style={{
+                    ...styles.selectionBox,
+                    left: `${selectionRect.x}px`,
+                    top: `${selectionRect.y}px`,
+                    width: `${selectionRect.width}px`,
+                    height: `${selectionRect.height}px`,
+                  }} />
+                )}
               </div>
             )}
 
             {isActive && (
-              <>
-                <div style={styles.controls}>
-                  <button
-                    onClick={stopCamera}
-                    style={styles.stopButton}
-                    onMouseOver={(e) => e.target.style.transform = 'scale(1.05)'}
-                    onMouseOut={(e) => e.target.style.transform = 'scale(1)'}
-                  >
-                    <Power size={20} />
-                    Stop Camera
-                  </button>
-                  <button
-                    onClick={() => {
-                      console.log('🔘 Toggle button clicked! Current state:', showLandmarks);
-                      const newState = !showLandmarks;
-                      setShowLandmarks(newState);
-                      console.log('🔄 Setting showLandmarks to:', newState);
-                    }}
-                    style={styles.toggleButton}
-                    onMouseOver={(e) => e.target.style.transform = 'scale(1.05)'}
-                    onMouseOut={(e) => e.target.style.transform = 'scale(1)'}
-                  >
-                    {showLandmarks ? <EyeOff size={20} /> : <Eye size={20} />}
-                    {showLandmarks ? 'Hide Landmarks' : 'Show Landmarks'}
-                  </button>
-                </div>
-
-                {/* Sparky's Pep Talk Section */}
-                <div>
-                  <button
-                    onClick={generatePepTalk}
-                    style={styles.pepTalkButton}
-                    onMouseOver={(e) => e.target.style.transform = 'scale(1.05)'}
-                    onMouseOut={(e) => e.target.style.transform = 'scale(1)'}
-                  >
-                    <Sparkles size={20} />
-                    Get Sparky's Pep Talk!
-                  </button>
-
-                  {/* Always render the box to prevent layout shift */}
-                  <div style={styles.pepTalkBox}>
-                    <p style={styles.pepTalkText}>
-                      {pepTalk || "Click the button above for a motivational pep talk from Sparky! 🔱"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* DEBUG PANEL - Shows current state for troubleshooting */}
-                <div style={styles.debugPanel}>
-                  <h4 style={styles.debugTitle}>🔍 DEBUG TEST PANEL 🔍</h4>
-                  <div style={styles.debugItem}>
-                    ⚙️ showLandmarks State: <strong style={{color: showLandmarks ? '#00FF00' : '#FF0000'}}>{String(showLandmarks)}</strong>
-                  </div>
-                  <div style={styles.debugItem}>
-                    📹 Camera Active: <strong>{String(isActive)}</strong>
-                  </div>
-                  <div style={styles.debugItem}>
-                    🤖 Models Loaded: <strong>{String(modelsLoaded)}</strong>
-                  </div>
-                  <div style={styles.debugItem}>
-                    💬 Check browser console (F12) for detailed logs
-                  </div>
-                </div>
-              </>
+              <Canvas
+                ref={canvasRef}
+                style={styles.canvas}
+                camera={{ position: [0, 0, 1], fov: 75 }}
+                gl={{
+                  preserveDrawingBuffer: true,
+                  antialias: true,
+                  powerPreference: "high-performance"
+                }}
+              >
+                <Suspense fallback={null}>
+                  <ARScene
+                    // Pass all the state props to the AR Scene
+                    landmarks={landmarks}
+                    videoWidth={videoSize.width}
+                    videoHeight={videoSize.height}
+                    opacity={opacity}
+                    showHorns={showHorns}
+                    showGlasses={showGlasses}
+                    showPitchfork={showPitchfork}
+                    showSparky={showSparky}
+                    showSparkyMask={showSparkyMask}
+                    hornsColor={hornsColor}
+                    glassesColor={glassesColor}
+                    pitchforkColor={pitchforkColor}
+                    pitchforkHandleColor={pitchforkHandleColor}
+                    hornsSize={hornsSize}
+                    glassesSize={glassesSize}
+                    pitchforkSize={pitchforkSize}
+                    pitchforkRotation={pitchforkRotation}
+                    sparkySize={sparkySize}
+                    sparkyMaskSize={sparkyMaskSize}
+                    hornsStyle={hornsStyle}
+                    glassesStyle={glassesStyle}
+                    handLandmarks={handLandmarks}
+                  />
+                </Suspense>
+              </Canvas>
             )}
           </div>
 
-          <div style={styles.footer}>
-            <p style={styles.footerText}>
-              Built with 💛 for Sun Devil Nation | Go ASU! 🔱
-            </p>
-          </div>
+          {showQuiz ? (
+            <ASUQuiz onBack={() => setShowQuiz(false)} styles={styles} />
+          ) : (
+            <>
+              {isLoading && (
+            <div style={{
+              marginTop: '20px',
+              background: '#B8860B',
+              padding: '15px',
+              borderRadius: '5px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}>
+              <Loader color="#FFF8DC" />
+              <p style={{ color: '#FFF8DC', margin: 0 }}>
+                Loading face detection models...
+              </p>
+            </div>
+              )}
+
+          {error && (
+            <div style={{
+              marginTop: '20px',
+              background: '#8B0000',
+              padding: '15px',
+              borderRadius: '5px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}>
+              <AlertCircle color="#FFB6C1" />
+              <p style={{ color: '#FFB6C1', margin: 0 }}>{error}</p>
+            </div>
+          )}
+
+              {isActive && (
+            <>
+              <div style={styles.controls}>
+                <button onClick={stopCamera} style={{ ...styles.button, background: '#DC143C', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Power size={20} />
+                  Stop Camera
+                </button>
+                <button
+                  onClick={startSelection}
+                  style={{ ...styles.button, background: 'linear-gradient(90deg, #FFC627 0%, #FFD700 100%)', color: '#8B0000', display: 'flex', alignItems: 'center', gap: '10px' }}
+                >
+                  <Camera size={20} />
+                  Take Picture
+                </button>
+                <button
+                  onClick={generatePepTalk}
+                  style={{ ...styles.button, background: 'linear-gradient(90deg, #8B0000 0%, #FFC627 100%)', display: 'flex', alignItems: 'center', gap: '10px' }}
+                >
+                  <Sparkles size={20} />
+                  Get Pep Talk!
+                </button>
+                <button
+                  onClick={redirectToQuiz}
+                  style={{ ...styles.button, background: 'linear-gradient(90deg, #00A3E0 0%, #005A8C 100%)', display: 'flex', alignItems: 'center', gap: '10px' }}
+                >
+                  <BookOpen size={20} />
+                  Take ASU Quiz!
+                </button>
+              </div>
+
+              {/* Accessory Toggles */}
+              <div style={{
+                marginTop: '20px',
+                background: 'linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%)',
+                border: '2px solid #FFC627',
+                padding: '20px',
+                borderRadius: '10px'
+              }}>
+                <h3 style={{ color: '#FFC627', fontSize: '1.2rem', fontWeight: 'bold', textAlign: 'center', margin: '0 0 15px 0' }}>
+                  Accessories
+                </h3>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <button
+                    onClick={() => setShowHorns(!showHorns)}
+                    style={{
+                      ...styles.button,
+                      background: showHorns ? 'linear-gradient(90deg, #DC143C 0%, #8B0000 100%)' : '#555',
+                      padding: '10px 20px',
+                      fontSize: '0.9rem'
+                    }}
+                  >
+                    😈 Horns {showHorns ? 'ON' : 'OFF'}
+                  </button>
+                  <button
+                    onClick={() => setShowGlasses(!showGlasses)}
+                    style={{
+                      ...styles.button,
+                      background: showGlasses ? 'linear-gradient(90deg, #DC143C 0%, #8B0000 100%)' : '#555',
+                      padding: '10px 20px',
+                      fontSize: '0.9rem'
+                    }}
+                  >
+                    🕶️ Glasses {showGlasses ? 'ON' : 'OFF'}
+                  </button>
+                  <button
+                    onClick={() => setShowPitchfork(!showPitchfork)}
+                    style={{
+                      ...styles.button,
+                      background: showPitchfork ? 'linear-gradient(90deg, #DC143C 0%, #8B0000 100%)' : '#555',
+                      padding: '10px 20px',
+                      fontSize: '0.9rem'
+                    }}
+                  >
+                    🔱 Pitchfork {showPitchfork ? 'ON' : 'OFF'}
+                  </button>
+                  <button
+                    onClick={() => setShowSparky(!showSparky)}
+                    style={{
+                      ...styles.button,
+                      background: showSparky ? 'linear-gradient(90deg, #FFC627 0%, #FFD700 100%)' : '#555',
+                      padding: '10px 20px',
+                      fontSize: '0.9rem',
+                      color: showSparky ? '#8B0000' : '#FFF'
+                    }}
+                  >
+                    😈 Sparky {showSparky ? 'ON' : 'OFF'}
+                  </button>
+                  <button
+                    onClick={() => setShowSparkyMask(!showSparkyMask)}
+                    style={{
+                      ...styles.button,
+                      background: showSparkyMask ? 'linear-gradient(90deg, #FFC627 0%, #FFD700 100%)' : '#555',
+                      padding: '10px 20px',
+                      fontSize: '0.9rem',
+                      color: showSparkyMask ? '#8B0000' : '#FFF'
+                    }}
+                  >
+                    😈 Sparky Mask {showSparkyMask ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Detection Status */}
+              <div style={{
+                marginTop: '20px',
+                background: 'linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%)',
+                border: '2px solid #FFC627',
+                padding: '20px',
+                borderRadius: '10px'
+              }}>
+                <h3 style={{ color: '#FFC627', fontSize: '1.2rem', fontWeight: 'bold', textAlign: 'center', margin: '0 0 15px 0' }}>
+                  Detection Status
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <p style={{ color: landmarks ? '#00FF00' : '#FF0000', fontSize: '0.9rem', textAlign: 'center', margin: '0' }}>
+                    {landmarks ? '✓ Face detected - Accessories active!' : '✗ No face detected - Move into camera view'}
+                  </p>
+                  {showPitchfork && (
+                    <p style={{ color: handLandmarks ? '#00FF00' : '#FFC627', fontSize: '0.9rem', textAlign: 'center', margin: '0' }}>
+                      {handLandmarks ? '✓ Hand detected - Pitchfork active!' : '⌛ Raise your hand to hold the pitchfork'}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Color Pickers */}
+              <div style={{
+                marginTop: '20px',
+                background: 'linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%)',
+                border: '2px solid #FFC627',
+                padding: '20px',
+                borderRadius: '10px'
+              }}>
+                <h3 style={{ color: '#FFC627', fontSize: '1.2rem', fontWeight: 'bold', textAlign: 'center', margin: '0 0 15px 0' }}>
+                  Accessory Colors
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px' }}>
+                  <div>
+                    <label style={{ color: '#FFF', fontSize: '0.9rem', display: 'block', marginBottom: '5px' }}>
+                      😈 Horns Color
+                    </label>
+                    <input
+                      type="color"
+                      value={hornsColor}
+                      onChange={(e) => setHornsColor(e.target.value)}
+                      style={{ width: '100%', height: '40px', cursor: 'pointer', borderRadius: '5px', border: '2px solid #FFC627' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: '#FFF', fontSize: '0.9rem', display: 'block', marginBottom: '5px' }}>
+                      🕶️ Glasses Color
+                    </label>
+                    <input
+                      type="color"
+                      value={glassesColor}
+                      onChange={(e) => setGlassesColor(e.target.value)}
+                      style={{ width: '100%', height: '40px', cursor: 'pointer', borderRadius: '5px', border: '2px solid #FFC627' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: '#FFF', fontSize: '0.9rem', display: 'block', marginBottom: '5px' }}>
+                      🔱 Pitchfork Prongs
+                    </label>
+                    <input
+                      type="color"
+                      value={pitchforkColor}
+                      onChange={(e) => setPitchforkColor(e.target.value)}
+                      style={{ width: '100%', height: '40px', cursor: 'pointer', borderRadius: '5px', border: '2px solid #FFC627' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: '#FFF', fontSize: '0.9rem', display: 'block', marginBottom: '5px' }}>
+                      🔱 Pitchfork Handle
+                    </label>
+                    <input
+                      type="color"
+                      value={pitchforkHandleColor}
+                      onChange={(e) => setPitchforkHandleColor(e.target.value)}
+                      style={{ width: '100%', height: '40px', cursor: 'pointer', borderRadius: '5px', border: '2px solid #FFC627' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Opacity Slider */}
+              <div style={{
+                marginTop: '20px',
+                background: 'linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%)',
+                border: '2px solid #FFC627',
+                padding: '20px',
+                borderRadius: '10px'
+              }}>
+                <label style={{ color: '#FFC627', fontSize: '1.2rem', fontWeight: 'bold', display: 'block', textAlign: 'center', marginBottom: '10px' }}>
+                  Opacity: {Math.round(opacity * 100)}%
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={opacity * 100}
+                  onChange={(e) => setOpacity(e.target.value / 100)}
+                  style={{ width: '100%', cursor: 'pointer' }}
+                />
+              </div>
+
+              {/* Size Sliders */}
+              <div style={{
+                marginTop: '20px',
+                background: 'linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%)',
+                border: '2px solid #FFC627',
+                padding: '20px',
+                borderRadius: '10px'
+              }}>
+                <h3 style={{ color: '#FFC627', fontSize: '1.2rem', fontWeight: 'bold', textAlign: 'center', margin: '0 0 15px 0' }}>
+                  Accessory Sizes
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+                  <div>
+                    <label style={{ color: '#FFF', fontSize: '0.9rem', display: 'block', textAlign: 'center', marginBottom: '5px' }}>
+                      😈 Horns Size: {Math.round(hornsSize * 100)}%
+                    </label>
+                    <input
+                      type="range"
+                      min="50"
+                      max="200"
+                      value={hornsSize * 100}
+                      onChange={(e) => setHornsSize(e.target.value / 100)}
+                      style={{ width: '100%', cursor: 'pointer' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: '#FFF', fontSize: '0.9rem', display: 'block', textAlign: 'center', marginBottom: '5px' }}>
+                      🕶️ Glasses Size: {Math.round(glassesSize * 100)}%
+                    </label>
+                    <input
+                      type="range"
+                      min="50"
+                      max="200"
+                      value={glassesSize * 100}
+                      onChange={(e) => setGlassesSize(e.target.value / 100)}
+                      style={{ width: '100%', cursor: 'pointer' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: '#FFF', fontSize: '0.9rem', display: 'block', textAlign: 'center', marginBottom: '5px' }}>
+                      🔱 Pitchfork Size: {Math.round(pitchforkSize * 100)}%
+                    </label>
+                    <input
+                      type="range"
+                      min="50"
+                      max="200"
+                      value={pitchforkSize * 100}
+                      onChange={(e) => setPitchforkSize(e.target.value / 100)}
+                      style={{ width: '100%', cursor: 'pointer' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: '#FFF', fontSize: '0.9rem', display: 'block', textAlign: 'center', marginBottom: '5px' }}>
+                      😈 Sparky Size: {Math.round(sparkySize * 100)}%
+                    </label>
+                    <input
+                      type="range"
+                      min="50"
+                      max="200"
+                      value={sparkySize * 100}
+                      onChange={(e) => setSparkySize(e.target.value / 100)}
+                      style={{ width: '100%', cursor: 'pointer' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: '#FFF', fontSize: '0.9rem', display: 'block', textAlign: 'center', marginBottom: '5px' }}>
+                      😈 Sparky Mask Size: {Math.round(sparkyMaskSize * 100)}%
+                    </label>
+                    <input
+                      type="range"
+                      min="50"
+                      max="200"
+                      value={sparkyMaskSize * 100}
+                      onChange={(e) => setSparkyMaskSize(e.target.value / 100)}
+                      style={{ width: '100%', cursor: 'pointer' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Pitchfork Rotation */}
+              <div style={{
+                marginTop: '20px',
+                background: 'linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%)',
+                border: '2px solid #FFC627',
+                padding: '20px',
+                borderRadius: '10px'
+              }}>
+                <h3 style={{ color: '#FFC627', fontSize: '1.2rem', fontWeight: 'bold', textAlign: 'center', margin: '0 0 15px 0' }}>
+                  Pitchfork Rotation
+                </h3>
+                <div>
+                  <label style={{ color: '#FFF', fontSize: '0.9rem', display: 'block', textAlign: 'center', marginBottom: '10px' }}>
+                    🔱 Rotation: {Math.round((pitchforkRotation * 180) / Math.PI)}°
+                  </label>
+                  <input
+                    type="range"
+                    min="-180"
+                    max="180"
+                    value={(pitchforkRotation * 180) / Math.PI}
+                    onChange={(e) => setPitchforkRotation((e.target.value * Math.PI) / 180)}
+                    style={{ width: '100%', cursor: 'pointer' }}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px' }}>
+                    <span style={{ color: '#FFC627', fontSize: '0.8rem' }}>-180°</span>
+                    <span style={{ color: '#FFC627', fontSize: '0.8rem' }}>0°</span>
+                    <span style={{ color: '#FFC627', fontSize: '0.8rem' }}>+180°</span>
+                  </div>
+                  <button
+                    onClick={() => setPitchforkRotation(0)}
+                    style={{
+                      ...styles.button,
+                      background: 'linear-gradient(90deg, #FFC627 0%, #FFD700 100%)',
+                      color: '#8B0000',
+                      padding: '8px 20px',
+                      fontSize: '0.85rem',
+                      marginTop: '10px',
+                      width: '100%'
+                    }}
+                  >
+                    Reset Rotation
+                  </button>
+                </div>
+              </div>
+
+              {/* Style Selectors */}
+              <div style={{
+                marginTop: '20px',
+                background: 'linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%)',
+                border: '2px solid #FFC627',
+                padding: '20px',
+                borderRadius: '10px'
+              }}>
+                <h3 style={{ color: '#FFC627', fontSize: '1.2rem', fontWeight: 'bold', textAlign: 'center', margin: '0 0 15px 0' }}>
+                  Accessory Styles
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+                  <div>
+                    <label style={{ color: '#FFF', fontSize: '0.9rem', display: 'block', marginBottom: '5px' }}>
+                      😈 Horns Style
+                    </label>
+                    <select
+                      value={hornsStyle}
+                      onChange={(e) => setHornsStyle(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: '5px',
+                        border: '2px solid #FFC627',
+                        background: '#1a1a1a',
+                        color: '#FFF',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      <option value="devil">Devil (Angled)</option>
+                      <option value="curved">Curved</option>
+                      <option value="straight">Straight</option>
+                      <option value="ram">Ram (Spiral)</option>
+                      <option value="dragon">Dragon (Twisted)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ color: '#FFF', fontSize: '0.9rem', display: 'block', marginBottom: '5px' }}>
+                      🕶️ Glasses Style
+                    </label>
+                    <select
+                      value={glassesStyle}
+                      onChange={(e) => setGlassesStyle(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: '5px',
+                        border: '2px solid #FFC627',
+                        background: '#1a1a1a',
+                        color: '#FFF',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      <option value="rectangular">Rectangular</option>
+                      <option value="round">Round</option>
+                      <option value="aviator">Aviator</option>
+                      <option value="cat-eye">Cat-Eye</option>
+                      <option value="visor">Visor (Futuristic)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {pepTalk && (
+                <div style={{
+                  marginTop: '20px',
+                  background: 'linear-gradient(135deg, #8B0000 0%, #DC143C 100%)',
+                  border: '3px solid #FFC627',
+                  padding: '20px',
+                  borderRadius: '15px',
+                  textAlign: 'center'
+                }}>
+                  <p style={{ color: 'white', fontSize: '1.1rem', margin: 0, lineHeight: '1.6' }}>
+                    {pepTalk}
+                  </p>
+                </div>
+              )}
+                </>
+              )}
+            </>
+          )}
         </div>
 
-        <div style={styles.instructions}>
-          <h3 style={styles.instructionsTitle}>How to Use:</h3>
-          <ul style={styles.instructionsList}>
-            <li style={styles.instructionItem}>✅ Wait for models to load (happens once)</li>
-            <li style={styles.instructionItem}>🎥 Click "Start Camera" to activate your webcam</li>
-            <li style={styles.instructionItem}>💡 Make sure you have good lighting</li>
-            <li style={styles.instructionItem}>🎭 Face the camera directly and move closer if needed</li>
-            <li style={styles.instructionItem}>🟢 Watch the 68 green dots track your facial features!</li>
-            <li style={styles.instructionItem}>👁️ Toggle landmarks visibility with the Show/Hide button</li>
-            <li style={styles.instructionItem}>✨ Click "Get Sparky's Pep Talk!" for motivational messages</li>
-            <li style={styles.instructionItem}>🔱 Show your Sun Devil pride!</li>
-          </ul>
+        <div style={styles.footer}>
+          <p style={{ color: '#FFC627', fontWeight: '600', margin: 0 }}>
+            Built with 💛 for Sun Devil Nation | 3D AR with Three.js | Go ASU! 🔱
+          </p>
         </div>
       </div>
     </div>

@@ -1,10 +1,10 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import App from './asu-sparky-face-filter'
+import FaceFilter from './asu-sparky-face-filter'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <FaceFilter />
   </StrictMode>,
 )
